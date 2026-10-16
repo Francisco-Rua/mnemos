@@ -197,7 +197,7 @@ Desktop so you never copy addresses or tokens by hand.</p></body>""",
         return JSONResponse({"ok": True, "contexts": list(subs), "mode": "local"})
 
     from .local_ui import UI
-    token = (home / "token").read_text().strip()
+    token = os.environ.get("MNEMOS_TOKEN") or (home / "token").read_text().strip()  # Desktop: from the Keychain
     ui = UI(servers, home, token)
     from . import local_hygiene as lh
 
@@ -241,7 +241,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{len(rep['items'])} cleanup proposals ({rep['mode']}) → {home / 'data' / 'hygiene.json'}")
         return 0
     if a.cmd == "token":
-        print((home / "token").read_text().strip())
+        print(os.environ.get("MNEMOS_TOKEN") or (home / "token").read_text().strip())
         return 0
     if a.cmd == "stdio":
         if not a.context:
