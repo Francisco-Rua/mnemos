@@ -1,0 +1,22 @@
+[
+ ["S","I drink coffee every morning","Todas las mañanas tomo café"],
+ ["S","Mi hermana se llama Laura","My sister's name is Laura"],
+ ["S","Works as a data engineer at Acme","Is a data engineer at Acme"],
+ ["S","Prefers answers in Spanish","Prefiere respuestas en español"],
+ ["S","Uses Neovim as main editor","Su editor principal es Neovim"],
+ ["S","Lives in Dublin","Vive en Dublín, Irlanda"],
+ ["S","Has two cats, Mia and Luna","Tiene dos gatas: Mia y Luna"],
+ ["C","Currently works at Acme","Currently works at Globex"],
+ ["C","Lives in Madrid","Vive en Dublín"],
+ ["C","Is vegetarian","Eats steak every week"],
+ ["C","Has two children","No tiene hijos"],
+ ["C","The hub database is Postgres","La base de datos del hub es solo SQLite"],
+ ["C","Always prefers dark mode","Siempre prefiere el modo claro"],
+ ["C","Was born in 1990","Nació en 1985"],
+ ["N","Has a dog called Toby","Likes hiking on weekends"],
+ ["N","Lives in Dublin","Trabaja en remoto para una empresa de Madrid"],
+ ["N","Uses Python at work","Uses TypeScript for side projects"],
+ ["N","Sister Laura lives in Rosario","Su hermano Pablo vive en Córdoba"],
+ ["N","Plays football on Tuesdays","Juega al pádel los jueves"],
+ ["N","Is learning German","Speaks English and Spanish"]
+]
