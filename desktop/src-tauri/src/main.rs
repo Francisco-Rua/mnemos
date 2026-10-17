@@ -276,6 +276,7 @@ fn start_hub(hub: State<Hub>) -> Result<(), String> {
         .stdout(log.try_clone().map_err(|e| e.to_string())?)
         .stderr(log)
         .env("MNEMOS_TOKEN", tok)
+        .env("MNEMOS_PARENT_PID", std::process::id().to_string())
         .spawn()
         .map_err(|e| format!("could not start the hub: {e}"))?;
     *g = Some(child);
@@ -338,7 +339,40 @@ fn show_main(app: &tauri::AppHandle) {
     }
 }
 
+/// Headless entry points (same code paths as the buttons; used by the end-to-end "friend test" and scripts):
+///   Mnemos --setup <contexts> <name>   (password on stdin)   = the first-run wizard
+///   Mnemos --connect-claude <context>                       = the Connect button
+///   Mnemos --open-memory                                    = menu "Open my memory" (browser, token from Keychain)
+fn headless() -> Option<i32> {
+    let args: Vec<String> = std::env::args().collect();
+    let flag = args.get(1)?.as_str();
+    if flag != "--setup" && flag != "--connect-claude" && flag != "--open-memory" {
+        return None;
+    }
+    let py = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join("../Resources/python/bin/python3")))
+        .filter(|p| p.is_file()).and_then(|p| p.canonicalize().ok());
+    let _ = BUNDLED_PY.set(py);
+    let res = if flag == "--open-memory" {
+        memory_url().and_then(|u| Command::new("open").arg(u).status().map(|_| "opened".to_string()).map_err(|e| e.to_string()))
+    } else if flag == "--setup" {
+        let mut pw = String::new();
+        let _ = std::io::stdin().read_line(&mut pw);
+        let ctxs = args.get(2).cloned().unwrap_or_else(|| "personal,work".into());
+        setup(ctxs.split(',').map(String::from).collect(), args.get(3).cloned().unwrap_or_default(),
+              pw.trim_end_matches(['\r', '\n']).to_string())
+    } else {
+        connect_claude(args.get(2).cloned().unwrap_or_default())
+    };
+    Some(match res {
+        Ok(m) => { println!("{m}"); 0 }
+        Err(e) => { eprintln!("{e}"); 1 }
+    })
+}
+
 fn main() {
+    if let Some(code) = headless() {
+        std::process::exit(code);
+    }
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(Hub(Mutex::new(None)))
