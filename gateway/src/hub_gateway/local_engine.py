@@ -279,11 +279,15 @@ class BuiltinLLM:
         return _json(await asyncio.to_thread(self._run, prompt))
 
 
+def _is_mac() -> bool:
+    return sys.platform == "darwin"
+
+
 def fm_helper() -> Path | None:
     """The Apple Foundation Model bridge (desktop/fm-helper, built with the macOS 26 SDK). In the Mac app it sits
     next to the bundled Python: Contents/Resources/{python,fm-helper}. MNEMOS_FM_HELPER overrides; "0" disables."""
     env = os.environ.get("MNEMOS_FM_HELPER")
-    if env == "0" or sys.platform != "darwin":
+    if env == "0" or not _is_mac():
         return None
     if env:
         return Path(env)
@@ -311,7 +315,10 @@ class AppleLLM:
     def probe(helper: Path) -> tuple[bool, str]:
         try:
             p = subprocess.run([str(helper)], input="", capture_output=True, text=True, timeout=20)
-            first = json.loads((p.stdout.splitlines() or ["{}"])[0])
+            lines = p.stdout.splitlines()
+            if not lines:
+                return False, ("helper did not start: " + p.stderr.strip()[-200:]).strip()
+            first = json.loads(lines[0])
             return bool(first.get("available")), str(first.get("reason") or "")
         except Exception as e:  # noqa: BLE001
             return False, type(e).__name__

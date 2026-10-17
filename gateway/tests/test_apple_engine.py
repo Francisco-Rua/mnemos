@@ -19,8 +19,9 @@ for line in sys.stdin:
 
 
 def helper(tmp_path, available: bool):
+    (tmp_path / "fake_fm.py").write_text(f"AVAILABLE = {available}\n" + FAKE)
     p = tmp_path / "fm-helper"
-    p.write_text(f"#!{sys.executable}\nAVAILABLE = {available}\n" + FAKE)
+    p.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{tmp_path / "fake_fm.py"}"\n')
     p.chmod(0o755)
     return p
 
@@ -30,7 +31,7 @@ def env(tmp_path, monkeypatch):
     for k, v in {"MNEMOS_OLLAMA": "0", "MNEMOS_NO_KEYCHAIN": "1", "MNEMOS_BUILTIN": "0"}.items():
         monkeypatch.setenv(k, v)
     monkeypatch.delenv("MNEMOS_DISCOVER_LLM", raising=False)
-    monkeypatch.setattr(le.sys, "platform", "darwin")
+    monkeypatch.setattr(le, "_is_mac", lambda: True)
     return tmp_path
 
 
@@ -57,8 +58,8 @@ def test_apple_unavailable_falls_back_to_rules(env, monkeypatch):
 
 
 def test_no_helper_off_mac(env, monkeypatch):
-    monkeypatch.setattr(le.sys, "platform", "linux")
+    monkeypatch.setattr(le, "_is_mac", lambda: False)
     assert le.fm_helper() is None
-    monkeypatch.setattr(le.sys, "platform", "darwin")
+    monkeypatch.setattr(le, "_is_mac", lambda: True)
     monkeypatch.setenv("MNEMOS_FM_HELPER", "0")
     assert le.fm_helper() is None
