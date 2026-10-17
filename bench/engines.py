@@ -57,7 +57,7 @@ class OpenAICompat:
 
 
 class AppleFM:
-    """Apple on-device Foundation Model through bench/fm-helper (one JSON line per request)."""
+    """Apple on-device Foundation Model through desktop/fm-helper (one JSON line per request)."""
     kind = "builtin"
 
     def __init__(self, helper: str, mode: str = "extract") -> None:
@@ -102,7 +102,7 @@ def make(spec: str):
         return OpenAICompat("http://127.0.0.1:8091", os.environ.get("MLX_MODEL", "/tmp/mnemos-bench/mlx-q3-4b"),
                             "MLX · qwen3-4b", mode)
     if key == "apple-fm":
-        return AppleFM(os.environ.get("FM_HELPER", "/tmp/mnemos-bench/fm-helper"), mode)
+        return AppleFM(os.environ.get("FM_HELPER", "/tmp/mnemos-desktop/fm-helper"), mode)
     if key == "ollama":
         return ollama(mode=mode)
     raise SystemExit("unknown engine " + spec)

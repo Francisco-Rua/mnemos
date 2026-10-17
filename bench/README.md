@@ -9,7 +9,7 @@ sources read-only and writes only under `/tmp/mnemos-bench`.
 - `bench_pairs.py <engine|emb:...> <out.json>`: duplicate/contradiction accuracy on `pairs.json` (synthetic EN/ES).
 - `bench_qa.py <corpus> <flat|graph> <engine> <qa.json> <out.json>`: question answering (`RETR=doc|q|hybrid`).
 - `bench_cognee.py`: Cognee embedded (own venv: `pip install cognee`).
-- `fm-helper/main.swift`: Apple Foundation Models bridge. Build it on macOS 26 with
+- `../desktop/fm-helper/main.swift` (moved into the app in 0.5): Apple Foundation Models bridge. Build it on macOS 26 with
   `swiftc -O -parse-as-library main.swift -o fm-helper`.
 
 The question set is private (it comes from personal sources) and is not in the repo. Write your own `qa.json` as

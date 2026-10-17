@@ -1,6 +1,6 @@
-// Tiny bridge to Apple's on-device Foundation Model (macOS 26+, Apple Intelligence on), for the local-mode
-// benchmark only. Reads one JSON object per line on stdin {"prompt": "..."}, writes one JSON line per request:
-// {"text": "..."} or {"error": "..."}. First line written is {"available": true|false, "reason": "..."}.
+// Tiny bridge to Apple's on-device Foundation Model (macOS 26+, Apple Intelligence on), bundled in the Mac app as
+// Contents/Resources/fm-helper. Reads one JSON object per line on stdin {"prompt": "...", "instructions": "..."},
+// writes one JSON line per request: {"text": "..."} or {"error": "..."}. First line: {"available": bool, "reason": "..."}.
 import Foundation
 import FoundationModels
 

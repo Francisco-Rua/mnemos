@@ -45,7 +45,7 @@ Findings:
 - **Coverage beats model size.** The same model mining 60 batches instead of 6 gives about 5× more useful facts.
 - **Apple FM** needs no download and runs out of process. Its quality is close to the 8b reference, but it
   hallucinates more and refused 2 of 15 calls (guardrails). It needs macOS 26 with Apple Intelligence on, plus a
-  small Swift bridge built with the macOS 26 SDK (`bench/fm-helper`).
+  small Swift bridge built with the macOS 26 SDK (`desktop/fm-helper`).
 - **MLX** is 1.7× faster than llama.cpp for the same Qwen3 4B, but adds about 235 MB of runtime and a second model
   format.
 

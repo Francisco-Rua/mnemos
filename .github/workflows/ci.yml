@@ -94,7 +94,21 @@ jobs:
           /tmp/probe/bin/python /tmp/probe.py | tee /tmp/out.txt
           grep -q "search hits 1" /tmp/out.txt
 
+  fm-helper:
+    # Apple Foundation Model bridge: needs the macOS 26 SDK, so it is built here and copied into the app below.
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+      - name: build desktop/fm-helper with the macOS 26 SDK
+        run: |
+          xcodebuild -version || true
+          FM_HELPER_REQUIRE=1 desktop/scripts/build_fm_helper.sh
+          file desktop/src-tauri/resources/fm-helper
+          echo '{"prompt":"Reply {\"ok\": true}"}' | desktop/src-tauri/resources/fm-helper | head -2
+      - uses: actions/upload-artifact@v7
+        with: { name: fm-helper, path: desktop/src-tauri/resources/fm-helper }
   desktop:
+    needs: [fm-helper]
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
@@ -105,6 +119,10 @@ jobs:
         with: { node-version: "22" }
       - uses: actions/setup-python@v7
         with: { python-version: "3.12" }
+      - uses: actions/download-artifact@v8
+        with: { name: fm-helper, path: "${{ runner.temp }}/fm" }
+      - name: bundle the Apple Intelligence helper
+        run: FM_HELPER_BIN="$RUNNER_TEMP/fm/fm-helper" FM_HELPER_REQUIRE=1 desktop/scripts/build_fm_helper.sh
       - name: bundle a relocatable Python with mnemos-hub preinstalled (no uv needed by users)
         run: desktop/scripts/bundle_python.sh gateway
       - name: build unsigned macOS app + dmg (no Apple signing yet)
@@ -116,6 +134,8 @@ jobs:
           APP=desktop/src-tauri/target/release/bundle/macos/Mnemos.app
           PY="$APP/Contents/Resources/python/bin/python3"
           test -x "$PY"
+          test -x "$APP/Contents/Resources/fm-helper" && ! head -c2 "$APP/Contents/Resources/fm-helper" | grep -q '#!'
+          "$PY" -I -c "import sys; from pathlib import Path; from hub_gateway import local_engine as le; print('apple:', le.AppleLLM.probe(Path(sys.executable).resolve().parents[2] / 'fm-helper'))"
           for u in $(which -a uv 2>/dev/null); do sudo rm -f "$u"; done
           rm -f ~/.local/bin/uv ~/.cargo/bin/uv
           export HOME_T="$RUNNER_TEMP/mnemos-home"

@@ -1,7 +1,7 @@
 """Which "brain" does the smart parts of local mode, and the built-in model that makes Ollama optional.
 
 Features and the engines that can run them, in order of preference:
-  * import  (facts from chats)       → API (if the user enabled it for import) → Ollama → Built-in → Rules
+  * import  (facts from chats)       → API (if the user enabled it for import) → Ollama → Built-in → Apple → Rules
   * hygiene (contradictions)         → API (if enabled for hygiene)          → Ollama → Built-in → Rules
   * search  (embeddings for search/dedupe) → Ollama (HUB_EMBED_URL/HUB_EMBED_MODEL) → Built-in → keyword only
 An API key never sees search: only import and hygiene, each behind its own toggle, and the UI warns that the text
@@ -10,11 +10,14 @@ leaves the Mac.
 Built-in = two GGUF models (Qwen3 4B, or 1.7B on 8 GB Macs, + EmbeddingGemma) run in-process by llama.cpp (llama-cpp-python, bundled in the Desktop app's
 Python; Metal on Apple Silicon). Downloaded once, on first run or with "Improve my memory": resumable (HTTP Range
 on <file>.part), sha256-checked, stored in <MNEMOS_HOME>/models. Declining or a failed download keeps Rules.
+Apple = Apple's on-device Foundation Model through the bundled Swift helper (macOS 26 + Apple Intelligence, nothing
+to download); import only, and only when no better local model is there ("apple": "off" in engine.json disables).
 
 Settings: <home>/engine.json (no secrets). API keys: macOS Keychain through /usr/bin/security (fed on stdin, never
 on the command line), service io.mnemos.desktop.apikey; elsewhere (or MNEMOS_NO_KEYCHAIN=1) <home>/apikeys.json 0600.
 Env: MNEMOS_MODELS_MANIFEST (JSON list replacing MODELS, for tests/CI), MNEMOS_OLLAMA=0 (ignore Ollama),
-MNEMOS_DISCOVER_LLM=0 (rules only for import, tests), MNEMOS_BUILTIN=0 (never load the built-in models).
+MNEMOS_DISCOVER_LLM=0 (rules only for import, tests), MNEMOS_BUILTIN=0 (never load the built-in models),
+MNEMOS_FM_HELPER=<path>|0 (the Apple helper; 0 = never), MNEMOS_LLM_SIZE=4b|1.7b.
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ import hashlib
 import json
 import logging
 import os
+import platform
 import re
 import subprocess
 import sys
@@ -275,6 +279,74 @@ class BuiltinLLM:
         return _json(await asyncio.to_thread(self._run, prompt))
 
 
+def fm_helper() -> Path | None:
+    """The Apple Foundation Model bridge (desktop/fm-helper, built with the macOS 26 SDK). In the Mac app it sits
+    next to the bundled Python: Contents/Resources/{python,fm-helper}. MNEMOS_FM_HELPER overrides; "0" disables."""
+    env = os.environ.get("MNEMOS_FM_HELPER")
+    if env == "0" or sys.platform != "darwin":
+        return None
+    if env:
+        return Path(env)
+    try:
+        if int(platform.mac_ver()[0].split(".")[0] or 0) < 26:
+            return None
+    except ValueError:
+        return None
+    p = Path(sys.executable).resolve().parents[2] / "fm-helper"
+    return p if p.is_file() and os.access(p, os.X_OK) else None
+
+
+class AppleLLM:
+    """Apple's on-device model (macOS 26 + Apple Intelligence): nothing to download. One helper process, requests
+    serialised, restarted if it dies. Used for import only (0.5 benchmark: more false alarms as a cleanup judge)."""
+    kind = "apple"
+    mode = "extract"
+    name = "Apple Intelligence (on-device)"
+    model = "apple-foundation-model"
+
+    def __init__(self, helper: Path) -> None:
+        self.helper, self._p, self._lock = helper, None, threading.Lock()
+
+    @staticmethod
+    def probe(helper: Path) -> tuple[bool, str]:
+        try:
+            p = subprocess.run([str(helper)], input="", capture_output=True, text=True, timeout=20)
+            first = json.loads((p.stdout.splitlines() or ["{}"])[0])
+            return bool(first.get("available")), str(first.get("reason") or "")
+        except Exception as e:  # noqa: BLE001
+            return False, type(e).__name__
+
+    def _proc(self) -> Any:
+        if self._p is None or self._p.poll() is not None:
+            self._p = subprocess.Popen([str(self.helper)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                       stderr=subprocess.DEVNULL, text=True, bufsize=1)
+            first = json.loads(self._p.stdout.readline() or "{}")
+            if not first.get("available"):
+                self._p = None
+                raise RuntimeError("Apple Intelligence unavailable: " + str(first.get("reason", "")))
+        return self._p
+
+    def _run(self, prompt: str) -> str:
+        with self._lock:
+            p = self._proc()
+            p.stdin.write(json.dumps({"prompt": prompt + "\nReply with the JSON object only, no markdown."}) + "\n")
+            p.stdin.flush()
+            line = p.stdout.readline()
+        if not line:
+            self._p = None
+            raise RuntimeError("Apple Intelligence helper stopped")
+        r = json.loads(line)
+        if "error" in r:  # e.g. a guardrail refusal: no facts from this batch
+            return "{}"
+        t = str(r.get("text", "")).strip()
+        if t.startswith("```"):
+            t = t.strip("`").removeprefix("json")
+        return t
+
+    async def json(self, prompt: str) -> dict:
+        return _json(await asyncio.to_thread(self._run, prompt))
+
+
 # EmbeddingGemma prompts: stored note vectors use DOC (unchanged since 0.4, so old vectors stay valid); search
 # queries use QUERY; duplicate checks embed both sides with SIM (0.5 benchmark: perfect same/other split at ~0.80).
 PROMPTS = {"doc": "title: none | text: ", "query": "task: search result | query: ",
@@ -433,6 +505,8 @@ class Engine:
         self._llm: BuiltinLLM | None = None
         self._emb: BuiltinEmbedder | None = None
         self._ollama: tuple[float, tuple[str, str] | None] = (0.0, None)
+        self._apple: tuple[float, tuple[bool, str]] = (0.0, (False, ""))
+        self._apple_llm: AppleLLM | None = None
         self.dl.on_ready = self._upgraded
 
     # settings
@@ -443,6 +517,7 @@ class Engine:
             d = {}
         d.setdefault("builtin", "ask")  # ask | declined | on
         d.setdefault("api", {})
+        d.setdefault("apple", "auto")  # auto: used for import when there is no better local model | off
         return d
 
     def save_cfg(self, d: dict) -> None:
@@ -493,6 +568,17 @@ class Engine:
                 and not self.dl.ready()):
             self.dl.start()
 
+    def apple(self) -> tuple[bool, str]:
+        """(available, reason) of Apple's on-device model; probed at most every 10 minutes."""
+        h = fm_helper()
+        if h is None:
+            return False, "needs the Mac app on macOS 26 with Apple Intelligence"
+        t, v = self._apple
+        if time.monotonic() - t > 600:
+            v = AppleLLM.probe(h)
+            self._apple = (time.monotonic(), v)
+        return v
+
     # engines
     def llm(self, feature: str) -> Any:
         """The LLM for "import" or "hygiene"; None = rules."""
@@ -511,6 +597,10 @@ class Engine:
             if self._llm is None or self._llm.model != m["file"]:
                 self._llm = BuiltinLLM(m, path)
             return self._llm
+        if feature == "import" and self.cfg()["apple"] != "off" and self.apple()[0]:
+            if self._apple_llm is None:
+                self._apple_llm = AppleLLM(fm_helper())  # type: ignore[arg-type]
+            return self._apple_llm
         return None
 
     def embedder(self) -> Any:
@@ -541,6 +631,7 @@ class Engine:
                             "models": [{"role": m["role"], "name": m["name"], "size": m["size"], "license": m.get("license"),
                                         "present": self.dl.present(m)} for m in ms]},
                 "ollama": (self.ollama() or (None, None))[1],
+                "apple": {"choice": c["apple"], "available": self.apple()[0], "reason": self.apple()[1]},
                 "api": {"provider": api.get("provider"), "model": api.get("model") or "",
                         "has_key": bool(api.get("provider") and self.keys.get(api["provider"])),
                         **{f: bool(api.get(f)) for f in FEATURES}, "defaults": API_MODELS}}
@@ -574,6 +665,12 @@ class Engine:
         self.save_cfg(c)
         self.dl.state = {"state": "idle"}
         return {"ok": True}
+
+    async def h_apple(self, b: dict) -> dict:
+        c = self.cfg()
+        c["apple"] = "off" if b.get("choice") == "off" else "auto"
+        self.save_cfg(c)
+        return await self.h_status({})
 
     async def h_api(self, b: dict) -> dict:
         prov = b.get("provider") or None
@@ -615,6 +712,7 @@ class Engine:
         h[("POST", "engine/decline")] = self.h_decline
         h[("POST", "engine/remove")] = self.h_remove
         h[("POST", "engine/api")] = self.h_api
+        h[("POST", "engine/apple")] = self.h_apple
         h[("POST", "engine/api/test")] = self.h_api_test
 
 
