@@ -288,7 +288,11 @@ def main(argv: list[str] | None = None) -> int:
     _exit_with_parent()
     import uvicorn
     uvicorn.run(http_app(home, a.port), host="127.0.0.1", port=a.port, log_level="info")
-    return 0
+    # Stopped (Quit / SIGTERM): skip C++ static teardown. llama.cpp's Metal backend can GGML_ASSERT there while a
+    # built-in model is still resident, which macOS would report as a crash. All data is already committed.
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0)
 
 
 if __name__ == "__main__":

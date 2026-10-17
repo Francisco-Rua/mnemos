@@ -66,6 +66,7 @@ def _note(n: dict) -> dict:
 
 
 JUDGE = ("Two notes from someone's personal memory. Do they CONTRADICT each other (cannot both be true now)? "
+         "The same fact said in other words or in another language, or one note adding detail, is NOT a contradiction. "
          'Reply JSON only: {"contradict": true|false, "why": "<short reason>"}\nA: ')
 SEM_NEAR, SEM_RELATED = 0.93, 0.75
 
