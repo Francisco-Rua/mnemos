@@ -161,7 +161,7 @@ async def test_hygiene_uses_meaning(tmp_path):
 
 class Eager:
     """A small model that calls everything a contradiction, but knows a translation states the same fact."""
-    kind, name, mode = "builtin", "Built-in · eager", "classify"
+    kind, name, mode = "builtin", "Built-in · eager", "extract"
 
     async def json(self, prompt):
         if prompt.startswith(lh.SAME):
