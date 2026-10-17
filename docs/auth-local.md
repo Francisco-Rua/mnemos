@@ -18,7 +18,9 @@ HUB_LOCAL_USER=alex
 HUB_LOCAL_PASSWORD_HASH=scrypt:32768:8:1:...         # the line printed above (no $ signs, safe for compose)
 ```
 
-`docker compose up -d` (gateways are recreated). The `GH_OAUTH_*` variables are not needed. All hubs share the same
+`docker compose up -d` (gateways are recreated). The `GH_OAUTH_*` variables are not needed. If `GITHUB_USER` is set
+(or still `__COMPLETAR__`), also set `HUB_ALLOWED_GITHUB_LOGINS=<HUB_LOCAL_USER>`: the hubs only accept logins on that
+list, and it defaults to `GITHUB_USER`. All hubs share the same
 user; the context isolation is unchanged (one connector per context, one URL per context).
 
 ## What the server does

@@ -29,7 +29,7 @@ If Google rejects the redirect URI's domain, add `ts.net`'s parent for your tail
 domains** (`<your-tailnet>.ts.net`) and retry. 👆 (not verified: depends on Google's checks for your project)
 
 ## 3. Configure Mnemos ✅
-In `~/code/mnemos/.env` (back it up first):
+In the `.env` of your Mnemos checkout (back it up first):
 
 ```bash
 MNEMOS_GOOGLE_CLIENT_ID=1234567890-abc.apps.googleusercontent.com
