@@ -22,6 +22,8 @@ import re
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
+from .local_engine import embed_as
+
 from .local_import import _sentences, _tokens, norm
 
 log = logging.getLogger("hub.local_hygiene")
@@ -69,7 +71,7 @@ JUDGE = ("Two notes from someone's personal memory. Do they CONTRADICT each othe
          'Reply JSON only: {"contradict": true|false, "why": "<short reason>"}\nA: ')
 SAME = ("Two notes from someone's personal memory. Do they state the SAME fact (maybe in other words or another "
         'language)? Reply JSON only: {"same": true|false}\nA: ')
-SEM_NEAR, SEM_RELATED = 0.93, 0.75
+SEM_NEAR, SEM_RELATED = 0.80, 0.60  # on "sim" vectors (local_engine.PROMPTS): same fact / same topic
 
 
 def llm_judge(llm: Any) -> Callable[[str, str], Awaitable[str | None]]:
@@ -82,7 +84,7 @@ def llm_judge(llm: Any) -> Callable[[str, str], Awaitable[str | None]]:
         j = await llm.json(JUDGE + a[:800] + "\nB: " + b[:800])
         if not yes(j):
             return None
-        if getattr(llm, "mode", "") == "classify" and not yes(await llm.json(JUDGE + b[:800] + "\nB: " + a[:800])):
+        if getattr(llm, "kind", "") == "builtin" and not yes(await llm.json(JUDGE + b[:800] + "\nB: " + a[:800])):
             return None  # small built-in model: both orders must agree (halves its false alarms on paraphrases)
         if yes({"contradict": (await llm.json(SAME + a[:800] + "\nB: " + b[:800])).get("same")}):
             return None  # a paraphrase or translation ("drinks coffee" / "toma café") is not a contradiction
@@ -164,7 +166,7 @@ async def run(home: Path, contexts: list[str], call: Call, today: dt.date | None
         if embedder:
             live = [n for n in notes if n.get("editable", True) and not n.get("obsolete")][:500]
             try:
-                vecs = dict(zip([n["id"] for n in live], await embedder.embed([n["text"] for n in live])))
+                vecs = dict(zip([n["id"] for n in live], await embed_as(embedder, [n["text"] for n in live], "sim")))
             except Exception as exc:  # noqa: BLE001 — words only
                 log.warning("hygiene embeddings unavailable: %s", type(exc).__name__)
         found, related = analyze_notes(ctx, notes, today, vecs)

@@ -283,7 +283,7 @@
       .map(([k, e]) => `<div class="me-actions"><span class="badge">${LABEL[e.kind] || e.kind}</span><span class="small"><b>${esc(k)}</b> · ${esc(e.name)}${e.kind === "api" ? " · text leaves this Mac" : ""}</span></div>`).join("");
     $("st-models").innerHTML = b.models.map((m) => `<p class="small">${m.present ? "✓" : "○"} ${esc(m.name)} · ${gb(m.size)} · ${esc(m.license || "")} <span class="muted">(${m.role === "llm" ? "facts and cleanup" : "search and duplicates"})</span></p>`).join("");
     const busy = d.state === "downloading";
-    $("st-bstate").textContent = !b.runtime ? "not included in this install" : b.ready ? "installed" : busy ? "downloading" : b.choice === "declined" ? "not downloaded (you said not now)" : "not downloaded";
+    $("st-bstate").textContent = !b.runtime ? "not included in this install" : b.ready ? "installed" : b.upgrade ? (busy ? "upgrading to the better model — the previous one keeps working meanwhile" : "previous model in use — download the better one") : busy ? "downloading" : b.choice === "declined" ? "not downloaded (you said not now)" : "not downloaded";
     $("st-dl").classList.toggle("hidden", b.ready || !b.runtime); $("st-dl").disabled = busy;
     $("st-dl").textContent = d.state === "error" ? "Retry the download (it resumes)" : `Improve my memory (download ${gb(b.size)})`;
     $("st-rm").classList.toggle("hidden", !b.ready && !(b.models.some((m) => m.present)));
