@@ -279,6 +279,9 @@
         return head + `<label class="imp-item"><input type="checkbox" data-id="${esc(it.id)}" ${keep.has(it.id) ? "" : "checked"}><span>${esc(it.text)}</span></label>`;
       }).join("");
     }
+    const ev = Object.values(m.evidence || {}).reduce((a, n) => a + n, 0);
+    $("m-ev").classList.toggle("hidden", !ev);
+    $("m-ev-n").textContent = `${ev} passages of your own messages are searchable, so AI apps can find what you said (kept only in your Mnemos folder).`;
     clearTimeout(mPoll);
     if (run) mPoll = setTimeout(mLoad, 2000);
   }
@@ -291,6 +294,7 @@
   };
   $("m-pause").onclick = async () => { await api("/api/mine/pause", {}); mLoad(); };
   $("m-resume").onclick = async () => { try { await api("/api/mine/resume", {}); } catch (e) { $("m-msg").textContent = e.message; } mLoad(); };
+  $("m-forget").onclick = async () => { if (!confirm("Delete the searchable copy of your source messages? Saved notes stay.")) return; try { await api("/api/mine/forget-sources", {}); } catch (e) { alert(e.message); } mLoad(); };
   $("m-none").onclick = () => $("m-list").querySelectorAll("input").forEach((c) => { c.checked = false; });
   $("m-save").onclick = async (e) => {
     const ids = mPicked(); if (!ids.length) return;
