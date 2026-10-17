@@ -9,6 +9,7 @@ check of TokenGate (no DNS rebinding).
 
 from __future__ import annotations
 
+import asyncio
 import collections
 import hmac
 import json
@@ -181,6 +182,17 @@ class UI:
         self.sessions: dict[str, float] = {}
         self.hooks: dict[str, Any] = {}  # extra GET/POST handlers added by other features (import, hygiene)
 
+    async def graph(self, ctx: str, items: list[dict]) -> dict:
+        """Model triples when there are some (built in the background by a local model), else names and tags."""
+        from . import local_engine, local_graph
+        g = local_graph.get(self.home, ctx)
+        llm = await asyncio.to_thread(local_engine.get(self.home).local_llm)
+        building = g.start(items, llm)
+        tr = await asyncio.to_thread(g.triples)
+        out = local_graph.view(items, tr) if tr else {**build_graph(items), "source": "names"}
+        return {**out, "building": building, "progress": g.progress if building else None,
+                "engine": llm.name if llm else None}
+
     # -- auth
     def _authed(self, request) -> bool:
         sid = request.cookies.get(COOKIE, "")
@@ -341,7 +353,7 @@ class UI:
                 if path == "graph" and request.method == "GET":
                     ctx = str(body.get("context", ""))
                     items = (await self.action("list", {"context": ctx, "include_shared": True})).get("items", [])
-                    return j(200, build_graph(items))
+                    return j(200, await self.graph(ctx, items))
                 if path == "skills" and request.method == "GET":
                     return j(200, await self.skills(str(body.get("context", ""))))
                 if path == "skill" and request.method == "GET":
