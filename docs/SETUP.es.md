@@ -1,5 +1,8 @@
 # Mnemos — setup paso a paso (español)
 
+> ¿Querés replicar el setup completo del autor (conector único, login propio + passkeys, Ollama, alertas,
+> backups offsite)? Empezá por el mapa de [`FULL-SETUP.es.md`](FULL-SETUP.es.md).
+
 > English version: [`SETUP.md`](SETUP.md).
 
 Todo lo que se podía automatizar ya está en el repo (compose, gateway, scripts, tests). Lo que queda
@@ -11,6 +14,10 @@ LaunchAgents (usá cron o systemd).
 Convenciones: `<tailnet>` = tu nombre de tailnet (lo de antes de `.ts.net`), `<mac>` = el nombre MagicDNS
 del host en Tailscale, `<usuario>` = tu login de GitHub (`GITHUB_USER`). Requisitos: Docker + Compose v2,
 Python 3.11+, git, `gh` (opcional), 8 GB de RAM libres para Docker; Ollama si querés extracción local gratis.
+
+**Máquina:** un host siempre prendido con **16 GB de RAM recomendados** (8 GB+ para Docker más ~6 GB para
+`llama3.1:8b` en Ollama; con 8 GB en total usá una key de OpenAI) y ~15 GB de disco libre. No se tiene que dormir
+enchufado, o se frenan el hub, los jobs nocturnos y los backups (macOS: `sudo pmset -c sleep 0 disksleep 0`, ver paso 14).
 
 ---
 
@@ -77,6 +84,11 @@ pegá la clave, **Allow write access: NO**.
 
 ## 6. Tres OAuth Apps de GitHub (una por contexto)
 
+**Salteá este paso con el login propio** (`HUB_AUTH_PROVIDER=local`, [`auth-local.md`](auth-local.md), en inglés): no
+hace falta cuenta ni OAuth App de GitHub, las líneas `GITHUB_USER` / `GH_OAUTH_*` pueden quedar en `__COMPLETAR__`,
+pero poné `HUB_ALLOWED_GITHUB_LOGINS=<tu HUB_LOCAL_USER>` (la allowlist toma `GITHUB_USER` por defecto). El conector
+único (paso 12b) usa el mismo login.
+
 En <https://github.com/settings/developers> → *OAuth Apps* → *New OAuth App* (cuenta personal, no la org):
 
 | Application name | Homepage URL | Authorization callback URL | Variables en `.env` |
@@ -104,6 +116,12 @@ Leer memoria **no** usa LLM (el gateway pide `only_context`). Escribir sí (extr
   `docker run --rm curlimages/curl -s http://host.docker.internal:11434/api/tags`. Si no responde, Ollama está
   escuchando solo en loopback: `launchctl setenv OLLAMA_HOST 0.0.0.0` y reiniciá Ollama (eso lo expone a tu LAN;
   mejor restringilo con el firewall de macOS).
+- **Modelos de Ollama para los gateways** (opcional, el mismo Ollama): `ollama pull paraphrase-multilingual` (~0.6 GB)
+  y en `.env` `HUB_EMBED_URL=http://host.docker.internal:11434` + `HUB_EMBED_MODEL=paraphrase-multilingual` para la
+  búsqueda semántica de `memory_search` (vacío = solo keyword); `HUB_ANSWER_MODEL=llama3.1:8b` activa `memory_answer`;
+  `MNEMOS_HYGIENE=llm` usa `llama3.1:8b` en la higiene nocturna. En Linux los gateways no pueden usar
+  `host.docker.internal`: usá la IP del bridge de Docker (`ip -4 addr show docker0`, normalmente
+  `http://172.17.0.1:11434`). Verificá con `ollama list`.
 - Embeddings: por defecto **locales y multilingües** (`fastembed`, `paraphrase-multilingual-MiniLM-L12-v2`).
   No los cambies después de cargar datos (obliga a reindexar).
   Para cambiar de modelo después: editá solo `LLM_MODEL` en `cognee.env` y `docker compose up -d cognee`
@@ -169,7 +187,31 @@ Desde datos móviles **sin** Tailscale: `https://hub-personal.<tailnet>.ts.net/m
 `https://<mac>.<tailnet>.ts.net` (Vaultwarden) **no** responde. En el admin de Tailscale aparecen
 `hub-work`, `hub-personal`, `hub-side` con el tag `tag:hub-public`.
 
+```bash
+scripts/mnemos expose --check              # todos los hubs ok (DNS público + /mcp → 401); --apply completa lo que falte
+```
+
+## 12b. Opcional: un solo conector para todos los contextos (router)
+
+En vez de (o además de) un conector por contexto, `https://mnemos.<tailnet>.ts.net/mcp` sirve todos los contextos
+con una pantalla de consentimiento por app. Detalle: [`router.md`](router.md) (en inglés).
+
+```bash
+python3 scripts/init_env.py                          # agrega HUB_INTERNAL_KEY_<CTX> / MNEMOS_ROUTER_* sin tocar lo existente
+.venv/bin/python -m hub_gateway.local_auth hash      # HUB_LOCAL_USER + HUB_LOCAL_PASSWORD_HASH en .env
+# .env: COMPOSE_PROFILES=router   (opcional: HUB_PASSKEYS=1; Google: google-login.md)
+docker compose up -d                                 # levanta ts-mnemos + hub-router
+scripts/mnemos expose --check                        # muestra mnemos junto a los hubs
+```
+
+Con `HUB_PASSKEYS=1`, registrá una passkey en `https://mnemos.<tailnet>.ts.net/passkey/enroll`.
+
 ## 13. Conectar los asistentes (un conector por contexto)
+
+**Primero, los límites de cada plan** (detalle en [`CLIENTS.md`](CLIENTS.md)): Claude Free permite **un** conector
+custom (alcanza con el router), Pro/Max para uno por contexto. ChatGPT necesita developer mode (solo web); solo
+Business/Enterprise/Edu tienen lectura **y** escritura, **Pro es solo lectura** (`memory_save` bloqueado) y Plus no
+figura.
 
 Pasos detallados y qué está verificado: [`CLIENTS.md`](CLIENTS.md) (en inglés).
 
@@ -237,5 +279,26 @@ pmset -g custom                     # en "AC Power": sleep 0, disksleep 0
 Ojo: si `RESTIC_REPOSITORY` apunta a una carpeta de la misma notebook (ej. `~/mnemos-backups`), eso te cubre de
 errores y de un contenedor roto, pero no de perder la notebook. Copiá esa carpeta a un disco externo o a la nube
 (o cambiá el repo a un destino externo) para cumplir el diseño.
+
+**Copia offsite (opcional, rclone).** `backup.sh` termina corriendo `scripts/offsite_sync.sh`, que copia el repo
+restic (ya cifrado) a un remote en la nube:
+
+```bash
+brew install rclone
+rclone config create gdrive drive scope=drive.file   # abre el navegador; rclone solo ve lo que él crea
+# opcional en .env: MNEMOS_OFFSITE_REMOTE=gdrive:mnemos-backups (el default)
+./scripts/offsite_sync.sh                            # primera copia; log ~/Library/Logs/mnemos-offsite.log
+```
+
+Necesita que `RESTIC_REPOSITORY` sea una carpeta local; `rclone.conf` queda en `~/.config/rclone/`, nunca en el repo.
+
+**Alertas al celular (opcional, ntfy).** Instalá la app ntfy (iOS/Android) → *Subscribe to topic* → un nombre largo y
+aleatorio. Poné el mismo en `.env` como `MNEMOS_ALERT_NTFY_TOPIC=` (y `MNEMOS_ALERT_NTFY_SERVER=` si tenés ntfy propio)
+y corré `./scripts/hub_watchdog.py --test-alert`: te tiene que llegar una notificación de prueba. Slack/Discord:
+`MNEMOS_ALERT_WEBHOOK_URL=`.
+
+**Higiene nocturna.** El job de cognify también escribe un reporte en `~/mnemos-hygiene/`. `MNEMOS_HYGIENE` en `.env`:
+`report` (default, solo reglas), `llm` (+ contradicciones y notas vencidas con Ollama, `MNEMOS_HYGIENE_MODEL`, default
+`llama3.1:8b`), `apply` (+ borra solo duplicados exactos) u `off`.
 
 Una vez por mes, probá un restore completo en otra carpeta o máquina.

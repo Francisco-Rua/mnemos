@@ -175,7 +175,8 @@ missing) and lists possibly stale notes (`--stale-days`, default 180). `--llm ll
 (advisory). `--apply` deletes **only** exact duplicates in the same dataset (keeps the one with more tags; uses the
 owner user); everything else stays a proposal to decide by hand with `memory_update` / `memory_delete` (or
 `memory_admin.py` for shared). `cognify_nightly.sh` runs it after cognify according to `MNEMOS_HYGIENE` = `report`
-(default) | `llm` | `apply` | `off` (plist variable).
+(default) | `llm` | `apply` | `off`, read from the environment or from `.env` (model: `MNEMOS_HYGIENE_MODEL`, default
+`llama3.1:8b`).
 
 ## Funnel/DNS watchdog (`scripts/hub_watchdog.py`)
 

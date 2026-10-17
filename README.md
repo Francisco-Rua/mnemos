@@ -93,13 +93,30 @@ never content or secrets). Also included:
 
 ## Requirements
 
+- **An always-on host**: a Mac or Linux box that stays awake on power (macOS: `sudo pmset -c sleep 0 disksleep 0`),
+  **16 GB of RAM recommended** (8 GB+ for Docker, ~6 GB more for Ollama's `llama3.1:8b`) and ~15 GB of free disk.
 - **Docker** with Compose v2 (Docker Desktop on macOS; give it 8 GB+ of RAM).
 - **Tailscale** account with **MagicDNS, HTTPS certificates and Funnel** enabled, and an auth key tagged `tag:hub-public`.
-- **Three GitHub OAuth Apps** (one per context; callback `https://hub-<ctx>.<tailnet>.ts.net/auth/callback`).
-- An extraction LLM: an **OpenAI API key** or **Ollama** running on the host (`ollama pull llama3.1:8b`).
+- **A login for the assistants**, one of:
+  - the **built-in login** (`HUB_AUTH_PROVIDER=local`: a user + password, optional passkeys and Google): no GitHub
+    account or OAuth App needed ([`docs/auth-local.md`](docs/auth-local.md)); or
+  - **GitHub OAuth**: three GitHub OAuth Apps (one per context; callback `https://hub-<ctx>.<tailnet>.ts.net/auth/callback`).
+- An extraction LLM: an **OpenAI API key** or **Ollama** running on the host (`ollama pull llama3.1:8b`, plus
+  `ollama pull paraphrase-multilingual` for local semantic search).
 - Python 3.11+ on the host for the bootstrap scripts, tests and dashboard.
 - Optional: a **private** GitHub repo for your skills (start from [`examples/skills/`](examples/skills/)); by default they
   live in `./skills-local` (see *Skills: local folder or GitHub* below).
+- Optional: restic (+ rclone for an offsite copy) for backups, and the ntfy phone app for alerts.
+
+## Full setup (like the author's)
+
+Want everything the reference instance runs: Cognee + Ollama, the three contexts, Infisical + Vaultwarden, Tailscale
+sidecars, the **single connector** `https://mnemos.<tailnet>.ts.net/mcp` with the built-in login + passkeys (Google
+optional), the dashboard, the watchdog with phone alerts, nightly cognify + LLM hygiene, backups with an offsite copy
+and `scripts/update.sh`? Follow **[`docs/FULL-SETUP.md`](docs/FULL-SETUP.md)** (Spanish:
+[`docs/FULL-SETUP.es.md`](docs/FULL-SETUP.es.md)). It lists every account and app you need and what each one is for,
+the decisions to take up front, the Ollama models, the exact `.env` values for that setup and a final checklist,
+and links to the detailed steps below.
 
 ## Quickstart
 
@@ -108,7 +125,8 @@ git clone https://github.com/<you>/mnemos && cd mnemos
 ./scripts/bootstrap.sh            # generates .env / cognee.env (chmod 600), config/*.yaml and the skills deploy key
 python3 -m venv .venv && .venv/bin/pip install -e "gateway[dev]"
 
-# edit .env: GITHUB_USER, TS_TAILNET, NOTEBOOK_TS_NAME, TS_AUTHKEY_PUBLIC, GH_OAUTH_*  (__COMPLETAR__ = fill me)
+# edit .env: TS_TAILNET, NOTEBOOK_TS_NAME, TS_AUTHKEY_PUBLIC, and GITHUB_USER + GH_OAUTH_* (GitHub login)
+#           or HUB_AUTH_PROVIDER=local + HUB_LOCAL_* (built-in login)   (__COMPLETAR__ = fill me)
 # edit cognee.env: pick OpenAI or Ollama
 # edit config/contexts.yaml: your name and what belongs in each context
 # add secrets/skills_deploy_key.pub as a read-only deploy key on your skills repo
@@ -118,6 +136,7 @@ docker compose up -d vaultwarden infisical-db infisical-redis infisical cognee s
 .venv/bin/python scripts/bootstrap_cognee.py                  # users, datasets, per-context API keys
 docker compose up -d                                          # Funnel sidecars + gateways
 .venv/bin/python scripts/smoke_test.py --quick                # 401 + OAuth metadata on every hostname
+scripts/mnemos expose --apply                                 # tailnet-only Vaultwarden/Infisical + check every hub
 ```
 
 The full step-by-step guide (Tailscale ACLs, OAuth apps, Infisical, Vaultwarden, backups) is in
@@ -159,8 +178,13 @@ connect the same way. Details and what was verified: [`docs/auth-local.md`](docs
 
 ## Connecting your assistants
 
-One connector per context: `https://hub-<ctx>.<tailnet>.ts.net/mcp`. The login is always **your** GitHub account;
-any other account is rejected.
+One connector per context: `https://hub-<ctx>.<tailnet>.ts.net/mcp`, or **one** connector for all of them with the
+router (`https://mnemos.<tailnet>.ts.net/mcp`, [`docs/router.md`](docs/router.md)). The login is always **yours**
+(your GitHub account or the built-in user); any other account is rejected.
+
+Plan limits to check first: Claude Free allows one custom connector (Pro/Max for several); ChatGPT needs developer
+mode on the web, and only Business/Enterprise/Edu get read **and** write (Pro is read-only, Plus is not listed).
+Details in [`docs/CLIENTS.md`](docs/CLIENTS.md).
 
 - **Claude** (web, then Desktop/mobile): *Customize → Connectors → Add custom connector*, the URL, OAuth (dynamic
   client registration).
@@ -309,7 +333,8 @@ trabajo / personal / side projects). Corre en tu máquina con Docker y se expone
 de GitHub que solo te deja entrar a vos.
 
 Para arrancar: `./scripts/bootstrap.sh`, completá `.env`, `cognee.env` y `config/contexts.yaml`, y seguí la guía paso
-a paso en [`docs/SETUP.es.md`](docs/SETUP.es.md). La operación diaria (dashboard, cognify nocturno, higiene de memoria,
+a paso en [`docs/SETUP.es.md`](docs/SETUP.es.md). Para replicar el setup completo del autor (conector único, login propio + passkeys, Ollama, alertas y
+backups offsite), seguí [`docs/FULL-SETUP.es.md`](docs/FULL-SETUP.es.md). La operación diaria (dashboard, cognify nocturno, higiene de memoria,
 watchdog, backups) está en [`docs/OPERATIONS.es.md`](docs/OPERATIONS.es.md) y las instrucciones para pegar en cada app
 en [`docs/client-instructions.md`](docs/client-instructions.md). Los LaunchAgents y notificaciones son solo macOS y
 opcionales; en Linux usá cron o systemd. Licencia MIT.

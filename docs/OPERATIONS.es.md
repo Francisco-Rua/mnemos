@@ -174,7 +174,7 @@ las frases de la vieja que falten) y lista notas posiblemente viejas (`--stale-d
 `--apply` borra **solo** duplicados exactos del mismo dataset (conserva la de más tags; usa el usuario dueño); todo lo
 demás queda como propuesta para decidir a mano con `memory_update` / `memory_delete` (o `memory_admin.py` en shared).
 `cognify_nightly.sh` lo corre al terminar el cognify según `MNEMOS_HYGIENE` = `report` (default) | `llm` | `apply` |
-`off` (variable del plist).
+`off`, leído del entorno o de `.env` (modelo: `MNEMOS_HYGIENE_MODEL`, default `llama3.1:8b`).
 
 
 ## Watchdog Funnel/DNS (`scripts/hub_watchdog.py`)

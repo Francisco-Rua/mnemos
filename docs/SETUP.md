@@ -1,6 +1,7 @@
 # Mnemos — step-by-step setup
 
-> Spanish version: [`SETUP.es.md`](SETUP.es.md).
+> Spanish version: [`SETUP.es.md`](SETUP.es.md). Replicating the author's whole setup (single connector, built-in
+> login + passkeys, Ollama, alerts, offsite backups)? Start from the map in [`FULL-SETUP.md`](FULL-SETUP.md).
 
 Everything that could be automated is already in the repo (compose, gateway, scripts, tests). What is left needs
 your accounts, your machine or your judgement. Each step says **which exact value** to set and **how to verify** it.
@@ -11,6 +12,10 @@ LaunchAgents (use cron or systemd).
 Conventions: `<tailnet>` = your tailnet name (the part before `.ts.net`), `<mac>` = the host's MagicDNS name in
 Tailscale, `<user>` = your GitHub login (`GITHUB_USER`). Requirements: Docker + Compose v2, Python 3.11+, git, `gh`
 (optional), 8 GB of free RAM for Docker; Ollama if you want free local extraction.
+
+**Machine:** an always-on host with **16 GB of RAM recommended** (8 GB+ for Docker plus ~6 GB for Ollama's
+`llama3.1:8b`; with 8 GB total use an OpenAI key instead) and ~15 GB of free disk. It must not sleep while plugged
+in, or the hub, the night jobs and the backups stop (macOS: `sudo pmset -c sleep 0 disksleep 0`, see step 14).
 
 ---
 
@@ -79,6 +84,11 @@ key, **Allow write access: NO**.
 
 ## 6. Three GitHub OAuth Apps (one per context)
 
+**Skip this step with the built-in login** (`HUB_AUTH_PROVIDER=local`, [`auth-local.md`](auth-local.md)): no GitHub
+account or OAuth App is needed, the `GITHUB_USER` / `GH_OAUTH_*` lines can stay `__COMPLETAR__`, but set
+`HUB_ALLOWED_GITHUB_LOGINS=<your HUB_LOCAL_USER>` (the allowlist defaults to `GITHUB_USER`). The single connector
+(step 12b) uses the same built-in login.
+
 At <https://github.com/settings/developers> → *OAuth Apps* → *New OAuth App* (personal account, not an org):
 
 | Application name | Homepage URL | Authorization callback URL | `.env` variables |
@@ -106,6 +116,11 @@ Reading memory does **not** use an LLM (the gateway asks for `only_context`). Wr
   reach it: `docker run --rm curlimages/curl -s http://host.docker.internal:11434/api/tags`. If it does not answer,
   Ollama listens on loopback only: `launchctl setenv OLLAMA_HOST 0.0.0.0` and restart Ollama (this exposes it to your
   LAN; better restrict it with the macOS firewall).
+- **Ollama models for the gateways** (optional, same Ollama): `ollama pull paraphrase-multilingual` (~0.6 GB) and in
+  `.env` `HUB_EMBED_URL=http://host.docker.internal:11434` + `HUB_EMBED_MODEL=paraphrase-multilingual` for semantic
+  `memory_search` (empty = keyword only); `HUB_ANSWER_MODEL=llama3.1:8b` enables `memory_answer`; `MNEMOS_HYGIENE=llm`
+  uses `llama3.1:8b` in the nightly hygiene. On Linux the gateways cannot use `host.docker.internal`: use the Docker
+  bridge IP (`ip -4 addr show docker0`, usually `http://172.17.0.1:11434`). Check with `ollama list`.
 - Embeddings: **local and multilingual** by default (`fastembed`, `paraphrase-multilingual-MiniLM-L12-v2`). Do not
   change them after loading data (forces a reindex). To change the LLM later: edit only `LLM_MODEL` in `cognee.env`
   and `docker compose up -d cognee` (what was extracted stays; embeddings do not change).
@@ -122,7 +137,8 @@ tailscale serve status
 
 **Never** use `tailscale funnel` on the Mac: the only public pieces are the `hub-*` sidecars.
 
-Shortcut: `scripts/mnemos expose --apply` does these two `tailscale serve` lines (and checks the hubs later); it is idempotent.
+Shortcut, once steps 10–11 are done: `scripts/mnemos expose --apply` does these two `tailscale serve` lines and starts
+any missing hub (so not before the bootstraps); it is idempotent.
 
 ## 9. Vaultwarden account
 
@@ -169,13 +185,34 @@ docker compose up -d                       # adds the 3 Funnel sidecars and the 
 python3 scripts/smoke_test.py --quick      # Cognee OK + 401 and OAuth metadata on the 3 hostnames
 ```
 
-`scripts/mnemos expose` then shows every hub as `ok` (public DNS + `/mcp` → 401).
+```bash
+scripts/mnemos expose --check              # every hub ok (public DNS + /mcp → 401); --apply fixes what is missing
+```
 
 From mobile data **without** Tailscale: `https://hub-personal.<tailnet>.ts.net/mcp` answers 401;
 `https://<mac>.<tailnet>.ts.net` (Vaultwarden) does **not** answer. The Tailscale admin shows `hub-work`,
 `hub-personal`, `hub-side` tagged `tag:hub-public`.
 
+## 12b. Optional: one connector for every context (router)
+
+Instead of (or next to) one connector per context, `https://mnemos.<tailnet>.ts.net/mcp` serves every context with a
+consent page per app. Full details: [`router.md`](router.md).
+
+```bash
+python3 scripts/init_env.py                          # adds HUB_INTERNAL_KEY_<CTX> / MNEMOS_ROUTER_* without touching existing values
+.venv/bin/python -m hub_gateway.local_auth hash      # HUB_LOCAL_USER + HUB_LOCAL_PASSWORD_HASH in .env
+# .env: COMPOSE_PROFILES=router   (optional: HUB_PASSKEYS=1; Google: google-login.md)
+docker compose up -d                                 # starts ts-mnemos + hub-router
+scripts/mnemos expose --check                        # lists mnemos next to the hubs
+```
+
+With `HUB_PASSKEYS=1`, enroll a passkey at `https://mnemos.<tailnet>.ts.net/passkey/enroll` ([`auth-local.md`](auth-local.md)).
+
 ## 13. Connect the assistants (one connector per context)
+
+**Plan limits first** (details in [`CLIENTS.md`](CLIENTS.md)): Claude Free allows **one** custom connector (enough with
+the router), Pro/Max for one per context. ChatGPT needs developer mode (web only); only Business/Enterprise/Edu get
+read **and** write, **Pro is read-only** (`memory_save` blocked) and Plus is not listed.
 
 Detailed, up-to-date steps with what is verified: [`CLIENTS.md`](CLIENTS.md).
 
@@ -239,6 +276,27 @@ To keep the Mac from sleeping while plugged in (so the hub and the nightly backu
 sudo pmset -c sleep 0 disksleep 0   # the display still turns off on its own (displaysleep untouched)
 pmset -g custom                     # under "AC Power": sleep 0, disksleep 0
 ```
+
+**Offsite copy (optional, rclone).** `backup.sh` ends by running `scripts/offsite_sync.sh`, which copies the (already
+encrypted) restic repo to a cloud remote:
+
+```bash
+brew install rclone
+rclone config create gdrive drive scope=drive.file   # opens the browser; rclone only sees the files it creates
+# optional in .env: MNEMOS_OFFSITE_REMOTE=gdrive:mnemos-backups (the default)
+./scripts/offsite_sync.sh                            # first copy; log ~/Library/Logs/mnemos-offsite.log
+```
+
+It needs `RESTIC_REPOSITORY` to be a local folder; `rclone.conf` stays in `~/.config/rclone/`, never in the repo.
+
+**Phone alerts (optional, ntfy).** Install the ntfy app (iOS/Android) → *Subscribe to topic* → a long random name.
+Put the same name in `.env` as `MNEMOS_ALERT_NTFY_TOPIC=` (and `MNEMOS_ALERT_NTFY_SERVER=` if you self-host ntfy),
+then `./scripts/hub_watchdog.py --test-alert`: the phone must get a test notification. The watchdog reads `.env` on
+every run, no reinstall needed. Slack/Discord: `MNEMOS_ALERT_WEBHOOK_URL=` instead.
+
+**Nightly hygiene.** The cognify job also writes a hygiene report to `~/mnemos-hygiene/`. `MNEMOS_HYGIENE` in
+`.env`: `report` (default, rules only), `llm` (+ contradictions and outdated notes with Ollama,
+`MNEMOS_HYGIENE_MODEL`, default `llama3.1:8b`), `apply` (+ deletes exact duplicates only) or `off`.
 
 Note: if `RESTIC_REPOSITORY` points to a folder on the same laptop (e.g. `~/mnemos-backups`), that covers mistakes
 and a broken container, but not losing the laptop. Copy that folder to an external disk or the cloud (or point the

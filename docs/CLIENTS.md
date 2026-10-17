@@ -4,6 +4,18 @@ One connector per context. URL pattern: `https://hub-<ctx>.<tailnet>.ts.net/mcp`
 `scripts/mnemos expose`). Every client logs in with **your** GitHub account (the only login in
 `HUB_ALLOWED_GITHUB_LOGINS`); nothing secret is pasted into any client.
 
+**Plan limits, before you start:**
+
+| Client | What your plan allows |
+|---|---|
+| Claude | Free: **one** custom connector (enough with the single connector below); Pro/Max: one per context; Team/Enterprise: an Owner adds it first |
+| ChatGPT | Web only, developer mode. Read **and** write: Business/Enterprise/Edu (beta). **Pro: read/fetch only** (`memory_save` blocked). Plus: not listed |
+| Grok | grok.com custom connectors; Business/Enterprise: an admin provisions it first |
+| Cursor | any plan (`~/.cursor/mcp.json`) |
+
+With the built-in login (`HUB_AUTH_PROVIDER=local`, [auth-local.md](auth-local.md)) every "GitHub login" below is
+the Mnemos sign-in page instead.
+
 What every hub offers (checked against a live instance, 2026-10-10):
 
 | Check | Result |

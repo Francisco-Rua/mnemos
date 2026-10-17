@@ -14,7 +14,7 @@ for Claude Desktop. Result: **works**, with the limits below. Measured, not esti
 | Bundle | — | `dist/mnemos.mcpb` is **1.6 KB** (manifest + pyproject + 10-line entry point); deps (~107 MB venv + ~115 MB uv cache) are installed by the host on first run |
 | Isolation | CI (`tests/test_local_mode.py`) | other context cannot list, search or delete; store refuses foreign dataset files |
 
-## Not tested (needs Nico)
+## Not tested (needs a real user)
 
 - **Real install in Claude Desktop** (double-click `dist/mnemos.mcpb` → Install → set folder/context →
   ask Claude "remember that …", then "what do you remember about …"). The launch path was reproduced by hand;

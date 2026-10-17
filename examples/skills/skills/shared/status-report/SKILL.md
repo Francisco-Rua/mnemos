@@ -14,10 +14,11 @@ team, yourself). Write in the language the audience uses.
 
 ## 2. Sources (in this order)
 1. **Memory**: `memory_search` "progress / decisions / blockers <period>"; in contexts with projects, filter by `project`.
-2. **Git** (if you have a shell on the user's machine): the user's repos for this context. Ask where they live if
-   memory doesn't say.
+2. **Git** (if you have a shell on the user's machine): the user's repos for this context. Don't assume a folder:
+   use the location memory has for them, otherwise ask, and set `ROOT` to it.
    ```bash
-   for d in ~/code/*/; do
+   ROOT="<folder that holds the repos>"   # e.g. where the user keeps their clones
+   for d in "$ROOT"/*/; do
      [ -d "$d/.git" ] || continue
      out=$(git -C "$d" log --all --since="7 days ago" --author="$(git config user.email)" \
            --no-merges --format='%cs %h %s')
