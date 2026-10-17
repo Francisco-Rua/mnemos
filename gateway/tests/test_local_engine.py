@@ -159,6 +159,22 @@ async def test_hygiene_uses_meaning(tmp_path):
     assert rep["mode"] == "llm"
 
 
+class Eager:
+    """A small model that calls everything a contradiction, but knows a translation states the same fact."""
+    kind, name, mode = "builtin", "Built-in · eager", "classify"
+
+    async def json(self, prompt):
+        if prompt.startswith(lh.SAME):
+            return {"same": "café" in prompt and "coffee" in prompt}
+        return {"contradict": True, "why": "?"}
+
+
+async def test_judge_ignores_translations():
+    j = lh.llm_judge(Eager())
+    assert await j("Ana drinks coffee every morning", "Todas las mañanas Ana toma café") is None
+    assert await j("Ana works at Acme", "Ana works at Globex") == "?"
+
+
 @pytest.mark.skipif(not (le.runtime_ok() and os.environ.get("MNEMOS_TEST_GGUF")), reason="needs llama_cpp + a GGUF")
 async def test_real_tiny_model(tmp_path):
     m = {"role": "llm", "name": "tiny", "file": "t.gguf"}

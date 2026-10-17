@@ -66,8 +66,9 @@ def _note(n: dict) -> dict:
 
 
 JUDGE = ("Two notes from someone's personal memory. Do they CONTRADICT each other (cannot both be true now)? "
-         "The same fact said in other words or in another language, or one note adding detail, is NOT a contradiction. "
          'Reply JSON only: {"contradict": true|false, "why": "<short reason>"}\nA: ')
+SAME = ("Two notes from someone's personal memory. Do they state the SAME fact (maybe in other words or another "
+        'language)? Reply JSON only: {"same": true|false}\nA: ')
 SEM_NEAR, SEM_RELATED = 0.93, 0.75
 
 
@@ -83,6 +84,8 @@ def llm_judge(llm: Any) -> Callable[[str, str], Awaitable[str | None]]:
             return None
         if getattr(llm, "mode", "") == "classify" and not yes(await llm.json(JUDGE + b[:800] + "\nB: " + a[:800])):
             return None  # small built-in model: both orders must agree (halves its false alarms on paraphrases)
+        if yes({"contradict": (await llm.json(SAME + a[:800] + "\nB: " + b[:800])).get("same")}):
+            return None  # a paraphrase or translation ("drinks coffee" / "toma café") is not a contradiction
         return str(j.get("why") or "They disagree.")[:300]
     return judge
 
