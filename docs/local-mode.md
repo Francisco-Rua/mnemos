@@ -40,7 +40,7 @@ batch. Env: `MNEMOS_SCAN_HOME` (scan another home, used by tests), `MNEMOS_DISCO
 
 | Feature | Order |
 |---|---|
-| Import (facts from chats) | API key (if enabled for import) → Ollama → Built-in → Rules |
+| Import (facts from chats) | API key (if enabled for import) → Ollama → Built-in → Apple Intelligence → Rules |
 | Cleanup (contradictions; merges by meaning) | API key (if enabled for cleanup) → Ollama → Built-in → Rules |
 | Search / duplicate check (embeddings) | Ollama (`HUB_EMBED_URL`/`HUB_EMBED_MODEL`) → Built-in → keywords |
 
@@ -51,6 +51,11 @@ in-process by llama.cpp (`pip install "mnemos-hub[local-ai]"`; bundled in the Ma
 The model writes facts from batches of messages (extract mode; see `docs/benchmarks/local-architecture.md`).
 Embeddings use EmbeddingGemma's task prompts (document / search query / sentence similarity); duplicates by
 meaning are cosine ≥ 0.80 on similarity vectors.
+
+Apple Intelligence (Mac app on macOS 26 with Apple Intelligence on): Apple's on-device model through a small Swift
+helper bundled in the app (`desktop/fm-helper`, built in CI with the macOS 26 SDK). Nothing to download; used for
+import only when no built-in/Ollama model is there (it found fewer useful facts than Qwen3 4B in the benchmark and
+raised more false alarms as a cleanup judge). Settings → Apple Intelligence turns it off (`"apple": "off"`).
 
 Upgrading from 0.4: if you had said yes to the built-in model, the new one downloads in the background at start;
 the old Qwen2.5 1.5B keeps working until the new file is verified, then it is deleted.

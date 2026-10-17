@@ -23,3 +23,5 @@ find "$out/python" -name __pycache__ -type d -prune -exec rm -rf {} +
 rm -rf "$out/python/include" "$out/python/share" "$out/python/lib/python3."*/{test,idlelib,tkinter,turtledemo,ensurepip}
 "$py" -I -c "import hub_gateway.local, fastmcp, llama_cpp; print('bundled python ok:', fastmcp.__version__, 'llama.cpp', llama_cpp.__version__)"
 du -sh "$out/python"
+# the Apple Intelligence bridge is a bundled resource too (CI copies in the real build; else a stub)
+[ -e "$out/fm-helper" ] || "$here/scripts/build_fm_helper.sh"

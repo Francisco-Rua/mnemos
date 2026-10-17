@@ -270,7 +270,7 @@
 
   
   // ---------------------------------------------------------------- engine: built-in model, Ollama, API key
-  const LABEL = { rules: "Rules", builtin: "Built-in", ollama: "Ollama", api: "API" };
+  const LABEL = { rules: "Rules", builtin: "Built-in", ollama: "Ollama", api: "API", apple: "Apple" };
   const gb = (n) => n >= 1e9 ? (n / 1e9).toFixed(1) + " GB" : Math.round(n / 1e6) + " MB";
   let eng = null, engPoll = null;
   async function loadEngine() {
@@ -293,6 +293,9 @@
       $(box).classList.toggle("hidden", !busy);
       if (busy) { $(bar).value = d.total ? d.done / d.total : 0; $(ph).textContent = `${d.file || ""} · ${gb(d.done || 0)} of ${gb(d.total || 0)}`; }
     }
+    const ap = eng.apple || {};
+    $("st-apple").textContent = ap.available ? (ap.choice === "off" ? "available · off" : "available") : "not available on this Mac";
+    $("st-apple-on").checked = ap.choice !== "off"; $("st-apple-on").disabled = !ap.available;
     $("eo-size").textContent = gb(b.size);
     $("eng-offer").classList.toggle("hidden", !(b.runtime && !b.ready && (b.choice === "ask" || busy || (b.choice === "on" && d.state === "error"))));
     $("eo-go").disabled = busy; $("eo-no").classList.toggle("hidden", busy);
@@ -314,6 +317,7 @@
     try { await api("/api/engine/download", {}); } catch (e) { $("st-bmsg").textContent = e.message; }
     loadEngine();
   }
+  $("st-apple-on").onchange = async () => { await api("/api/engine/apple", { choice: $("st-apple-on").checked ? "auto" : "off" }); loadEngine(); };
   $("st-dl").onclick = () => engDownload($("st-dl"));
   $("eo-go").onclick = () => engDownload($("eo-go"));
   $("eo-no").onclick = async () => { await api("/api/engine/decline", {}); loadEngine(); };
