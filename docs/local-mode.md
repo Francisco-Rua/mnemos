@@ -64,3 +64,13 @@ API keys: macOS Keychain via `/usr/bin/security` (key passed on stdin, service `
 `<home>/apikeys.json` (0600) off macOS / with `MNEMOS_NO_KEYCHAIN=1`; never in `engine.json`. Secrets are
 stripped before any text reaches any model. Env: `MNEMOS_MODELS_MANIFEST` (replace the model list; CI uses a 1 MB
 test GGUF), `MNEMOS_OLLAMA=0`, `MNEMOS_BUILTIN=0`.
+
+## Full history (0.5)
+
+Import → **Full history** reads every chat of the sources picked in "Scan this Mac" with the import model, in the
+background (`local_mine.py`). Messages are batched per file in a fixed order; each batch is identified by the hash of
+its text and recorded in `<home>/mining.json` after it is read, so quitting and reopening the app resumes, and a
+later run only reads new batches. Found facts wait in that list until you save or dismiss them; saving goes through
+`memory_save`, so its duplicate check (words and meaning) still applies. Needs a model (Built-in, Ollama, Apple
+Intelligence, or an API key enabled for import). Hooks: `GET /api/mine`, `POST /api/mine/{start,pause,resume,save,dismiss}`.
+
