@@ -420,8 +420,9 @@ def build_server(
             j = len(tn & th) / len(tn | th) if tn and th else float(norm(text) == norm(h["text"]))
             sem = sims[i] if i < len(sims) else 0.0
             clash = lexical_conflict(text, h["text"])  # "2 dogs" vs "3 dogs": same words, not a duplicate
-            kind = ("duplicate" if (j >= 0.8 or sem >= SEM_DUP) and not clash else "related"
-                    if (j >= 0.3 or "semantic" in h.get("match", "")) else None)
+            # by meaning only with some shared words: a save is refused on "duplicate", so a false alarm costs a note
+            kind = ("duplicate" if (j >= 0.8 or (sem >= SEM_DUP and j >= 0.25)) and not clash else "related"
+                    if (j >= 0.3 or sem >= SEM_DUP or "semantic" in h.get("match", "")) else None)
             j = max(j, round(sem, 2)) if kind == "duplicate" else j
             if kind:
                 out.append({"id": h["id"], "kind": kind, "similarity": round(j, 2), "text": h["text"][:300]})
