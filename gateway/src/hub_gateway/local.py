@@ -118,7 +118,12 @@ def build_all(home: Path, port: int, only: str | None = None):
                       host="127.0.0.1", port=port, auth_provider="local")
         store = LocalNoteStore(home / "data" / "notes", MemoryScope(spec, dmap).allowed_ids(), names)
         index = LocalIndex(str(data / "search.sqlite"), EmbedProxy(engine))  # built-in/Ollama embeddings when present
-        out[name] = build_server(st, cognee=store, datasets=dmap, broker=SecretBroker({}, None), index=index)
+        from . import local_evidence
+
+        async def evidence(q: str, k: int, _ctx: str = name) -> list:
+            return await local_evidence.search(home, _ctx, q, k)
+        out[name] = build_server(st, cognee=store, datasets=dmap, broker=SecretBroker({}, None), index=index,
+                                 evidence=evidence)
         out[name].instructions = local_instructions(spec)  # proactive: this is the user's own memory
     return out
 
@@ -224,7 +229,11 @@ Desktop so you never copy addresses or tokens by hand.</p></body>""",
     from .local_mine import Miner
     disc = Discover(ui)
     disc.install()
-    ui.miner = Miner(ui, disc)
+    from . import local_evidence
+
+    async def _evidence(src: dict, batch: str) -> None:
+        await local_evidence.add_batch(home, src, batch)
+    ui.miner = Miner(ui, disc, on_batch=_evidence)
     ui.miner.install()
     app = Starlette(routes=[Route("/", home_page), Route("/health", health), *ui.routes(),
                             *[Mount(f"/{c}", app=s) for c, s in subs.items()]], lifespan=lifespan)

@@ -120,6 +120,7 @@ def build_server(
     ledger: Ledger | None = None,
     index: LocalIndex | None = None,
     answerer: Answerer | None = None,
+    evidence: Any = None,
 ) -> FastMCP:
     ctx = get_context(settings.context)
     audit = audit or Audit(settings.context, os.path.join(settings.data_dir, "audit.log"))
@@ -240,6 +241,8 @@ def build_server(
         mode: Annotated[Literal["auto", "graph", "keyword", "semantic", "hybrid"], Field(
             description="auto (default): búsqueda local híbrida y, si no encuentra nada, el grafo. graph: grafo de "
                         "Cognee. keyword/semantic/hybrid: solo local (notas completas con id)")] = "auto",
+        include_sources: Annotated[bool, Field(description="Modo local: sumar 'from_sources', fragmentos de los "
+                                               "mensajes propios del usuario a otras IAs (leídos con Historial completo)")] = True,
     ) -> dict[str, Any]:
         """Busca en la memoria de largo plazo del contexto activo (y en la compartida si include_shared).
         Devuelve fragmentos de contexto; no inventa respuestas. Los modos locales devuelven notas con id
@@ -268,7 +271,17 @@ def build_server(
             audit.log("memory_search", login, "error", error=type(exc).__name__)
             raise ToolError("la memoria (Cognee) no respondió; probá de nuevo más tarde") from exc
         audit.log("memory_search", login, "ok", mode=mode, results=len(results))
-        return {"context": ctx.name, "mode": mode, "results": results}
+        out: dict[str, Any] = {"context": ctx.name, "mode": mode, "results": results}
+        if evidence is not None and include_sources and mode != "graph":
+            try:
+                src = await evidence(query, 3)
+            except Exception:  # noqa: BLE001 — evidence is optional
+                src = []
+            if src:
+                out["from_sources"] = src
+                out["from_sources_note"] = ("the user's own past messages to AI tools (raw, may be outdated); "
+                                            "saved notes in results take precedence")
+        return out
 
     @mcp.tool(annotations={**READ_ONLY, "title": "Responder desde la memoria"})
     async def memory_answer(

@@ -74,3 +74,10 @@ later run only reads new batches. Found facts wait in that list until you save o
 `memory_save`, so its duplicate check (words and meaning) still applies. Needs a model (Built-in, Ollama, Apple
 Intelligence, or an API key enabled for import). Hooks: `GET /api/mine`, `POST /api/mine/{start,pause,resume,save,dismiss}`.
 
+
+## Your own messages, searchable (0.5)
+
+While Full history reads your chats it also keeps the messages themselves (after the secret filter) in
+`<home>/data/<ctx>/evidence.sqlite`, indexed like notes (keyword FTS5 + embeddings, rank fusion). `memory_search`
+in local mode adds up to 3 `from_sources` passages next to the saved notes (`include_sources=false` turns it off);
+saved notes take precedence. Import → Full history → **Forget source messages** deletes that copy.

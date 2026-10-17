@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import local_discover as ld
+from . import local_evidence
 from . import local_import as li
 
 log = logging.getLogger("hub_gateway.local_mine")
@@ -151,7 +152,8 @@ class Miner:
                 "read_batches": len(self.st["seen"]), "found": len(c),
                 "new": [x for x in c if x["status"] == "new"][:500],
                 "saved": sum(1 for x in c if x["status"] == "saved"),
-                "dismissed": sum(1 for x in c if x["status"] == "dismissed")}
+                "dismissed": sum(1 for x in c if x["status"] == "dismissed"),
+                "evidence": {ctx: local_evidence.count(self.ui.home, ctx) for ctx in self.ui.servers}}
 
     async def h_start(self, b: dict) -> dict:
         if self.task and not self.task.done():
@@ -200,8 +202,16 @@ class Miner:
         self._save()
         return await self.h_status({})
 
+    async def h_forget(self, _b: dict) -> dict:
+        """Delete the searchable copy of source messages (notes stay). Batches stay marked as read."""
+        if self.task and not self.task.done():
+            raise ValueError("pause the full-history reading first")
+        local_evidence.forget(self.ui.home, list(self.ui.servers))
+        return await self.h_status({})
+
     def install(self) -> None:
         h = self.ui.hooks
+        h[("POST", "mine/forget-sources")] = self.h_forget
         h[("GET", "mine")] = self.h_status
         h[("POST", "mine/start")] = self.h_start
         h[("POST", "mine/pause")] = self.h_pause
