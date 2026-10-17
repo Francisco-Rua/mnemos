@@ -85,14 +85,21 @@
       layout: { name: "cose", animate: false, nodeRepulsion: 9000 },
     });
     cy.on("tap", "node", (ev) => showNode(ev.target.id()));
-    $("g-node").innerHTML = graph.nodes.length ? `<p class="muted">${graph.nodes.length} names and topics from ${graph.notes} notes. Tap one.</p>`
-      : '<p class="muted">No names or topics yet: add a few notes first.</p>';
+    const how = graph.source === "model" ? "found by the model" : "names and topics";
+    const bld = graph.building ? ` <span class="small muted"><span class="spin"></span>${graph.engine ? esc(graph.engine) + " is " : ""}reading notes for relations${graph.progress && graph.progress.total ? ` (${graph.progress.done}/${graph.progress.total})` : ""}…</span>` : "";
+    $("g-node").innerHTML = (graph.nodes.length ? `<p class="muted">${graph.nodes.length} ${how} from ${graph.notes} notes. Tap one.</p>`
+      : '<p class="muted">No names or topics yet: add a few notes first.</p>') + bld;
+    clearTimeout(gPoll);
+    if (graph.building && !$("view-graph").classList.contains("hidden")) gPoll = setTimeout(loadGraph, 8000);
   }
+  let gPoll = null;
   function showNode(id) {
     const n = graph.nodes.find((x) => x.id === id); if (!n) return;
     const nb = graph.edges.filter((e) => e.source === id || e.target === id).map((e) => (e.source === id ? e.target : e.source));
     const label = (k) => (graph.nodes.find((x) => x.id === k) || {}).label || k;
+    const rel = graph.edges.filter((e) => (e.source === id || e.target === id) && e.label).flatMap((e) => e.label.split("; ")).slice(0, 10);
     $("g-node").innerHTML = `<h2>${esc(n.label)}</h2><p class="small muted">in ${n.count} note${n.count > 1 ? "s" : ""}${nb.length ? " · with " + nb.slice(0, 8).map((k) => esc(label(k))).join(", ") : ""}</p>` +
+      (rel.length ? `<ul class="small">${rel.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>` : "") +
       n.notes.map((nid) => { const t = graph.texts[nid] || ""; return `<div class="me-inote"><div>${esc(t.slice(0, 280))}${t.length > 280 ? "…" : ""}</div></div>`; }).join("");
   }
   $("g-ctx").onchange = loadGraph;

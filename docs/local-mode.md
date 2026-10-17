@@ -81,3 +81,10 @@ While Full history reads your chats it also keeps the messages themselves (after
 `<home>/data/<ctx>/evidence.sqlite`, indexed like notes (keyword FTS5 + embeddings, rank fusion). `memory_search`
 in local mode adds up to 3 `from_sources` passages next to the saved notes (`include_sources=false` turns it off);
 saved notes take precedence. Import → Full history → **Forget source messages** deletes that copy.
+
+## Graph view (0.5)
+
+When a local model is there (built-in or Ollama; never an API or Apple Intelligence), opening Graph starts a
+background pass that reads the notes 12 at a time and stores (subject, relation, object) triples per note in
+`<home>/data/<ctx>/graph.sqlite` (`local_graph.py`). Only new or edited notes are read again; deleted notes drop out.
+The view shows those entities and their relations; without a model it keeps the name/tag graph. No Cognee involved.

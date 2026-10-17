@@ -610,6 +610,19 @@ class Engine:
             return self._apple_llm
         return None
 
+    def local_llm(self) -> Any:
+        """Ollama or the built-in model, never an API or Apple: for work on saved notes the user did not send out
+        (the Graph view's triples)."""
+        o = self.ollama()
+        if o:
+            return OllamaLLM(*o)
+        if self.builtin_ready():
+            m, path = self._llm_file()  # type: ignore[misc]
+            if self._llm is None or self._llm.model != m["file"]:
+                self._llm = BuiltinLLM(m, path)
+            return self._llm
+        return None
+
     def embedder(self) -> Any:
         from .local_search import OllamaEmbedder
         o = OllamaEmbedder.from_env()
