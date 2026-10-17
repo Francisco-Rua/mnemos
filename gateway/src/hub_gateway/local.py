@@ -183,6 +183,7 @@ def http_app(home: Path, port: int):
             task = None
             from . import local_engine as _le
             _le.get(home).autostart()  # 0.4 → 0.5 model upgrade / resume an interrupted download, in the background
+            ui.miner.resume_on_start()  # full-history mining continues where it stopped
             if os.environ.get("MNEMOS_HYGIENE", "1") != "0":
                 from .local_hygiene import nightly
                 task = asyncio.create_task(nightly(home, list(subs), ui.call))
@@ -220,7 +221,11 @@ Desktop so you never copy addresses or tokens by hand.</p></body>""",
     from . import local_engine
     local_engine.get(home).install(ui)
     from .local_discover import Discover
-    Discover(ui).install()
+    from .local_mine import Miner
+    disc = Discover(ui)
+    disc.install()
+    ui.miner = Miner(ui, disc)
+    ui.miner.install()
     app = Starlette(routes=[Route("/", home_page), Route("/health", health), *ui.routes(),
                             *[Mount(f"/{c}", app=s) for c, s in subs.items()]], lifespan=lifespan)
     app.state.ui = ui

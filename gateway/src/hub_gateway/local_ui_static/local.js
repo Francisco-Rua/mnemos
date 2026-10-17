@@ -255,6 +255,54 @@
     window.open(b.dataset.cloud, "_blank", "noopener");
   }; });
   $("c-go").onclick = (e) => previewJSON("claude", { text: $("c-text").value }, e.target);
+  // ------------------------------------------------ full-history mining (background, resumable)
+  let mPoll = null, mNew = [];
+  async function mLoad() {
+    let m; try { m = await api("/api/mine"); } catch { return; }
+    const run = m.state === "running";
+    $("m-sum").textContent = m.found ? `${m.found} found · ${m.saved} saved · ${m.dismissed} dismissed` : "";
+    $("m-pause").classList.toggle("hidden", !run);
+    $("m-resume").classList.toggle("hidden", !(m.state === "paused" || m.state === "error") || !m.sources.length);
+    $("m-go").disabled = run;
+    $("m-progress").classList.toggle("hidden", !(run || m.state === "paused"));
+    $("m-bar").max = m.total || 1; $("m-bar").value = m.done || 0;
+    $("m-phase").textContent = run ? `${m.phase || "Reading"} · ${m.done || 0} of ${m.total || "?"} batches` : m.state === "paused" ? `Paused · ${m.read_batches} batches read` : "";
+    $("m-msg").textContent = m.state === "error" ? "Stopped: " + (m.error || "") : m.state === "done" ? "Up to date ✓" : "";
+    const ids = mNew.map((x) => x.id).join(); mNew = m.new || [];
+    $("m-review").classList.toggle("hidden", !mNew.length);
+    if (ids !== mNew.map((x) => x.id).join()) {
+      const keep = new Set([...$("m-list").querySelectorAll("input:not(:checked)")].map((c) => c.dataset.id));
+      let last = "";
+      $("m-list").innerHTML = mNew.map((it) => {
+        const head = it.source_label + it.context !== last ? `<h3 class="small" style="margin:14px 0 4px">${esc(it.source_label)} → ${esc(it.context)}</h3>` : "";
+        last = it.source_label + it.context;
+        return head + `<label class="imp-item"><input type="checkbox" data-id="${esc(it.id)}" ${keep.has(it.id) ? "" : "checked"}><span>${esc(it.text)}</span></label>`;
+      }).join("");
+    }
+    clearTimeout(mPoll);
+    if (run) mPoll = setTimeout(mLoad, 2000);
+  }
+  const mPicked = () => [...$("m-list").querySelectorAll("input:checked")].map((c) => c.dataset.id);
+  $("m-go").onclick = async () => {
+    if (!dSources.length) await dScan();
+    const chosen = [...$("d-sources").querySelectorAll("input:checked")].map((c) => ({ id: dSources[+c.dataset.i].id, context: $("d-sources").querySelector(`select[data-c="${c.dataset.i}"]`).value }));
+    try { await api("/api/mine/start", { sources: chosen }); } catch (e) { $("m-msg").textContent = e.message; return; }
+    mLoad();
+  };
+  $("m-pause").onclick = async () => { await api("/api/mine/pause", {}); mLoad(); };
+  $("m-resume").onclick = async () => { try { await api("/api/mine/resume", {}); } catch (e) { $("m-msg").textContent = e.message; } mLoad(); };
+  $("m-none").onclick = () => $("m-list").querySelectorAll("input").forEach((c) => { c.checked = false; });
+  $("m-save").onclick = async (e) => {
+    const ids = mPicked(); if (!ids.length) return;
+    const b = e.target; b.disabled = true; b.innerHTML = `<span class="spin"></span>Saving ${ids.length}…`;
+    try { const r = await api("/api/mine/save", { ids }); $("m-msg").textContent = `Saved ${r.saved} ✓${r.skipped ? ` · ${r.skipped} skipped (already there)` : ""}`; }
+    catch (err) { alert("Not saved: " + err.message); }
+    b.disabled = false; b.textContent = "Save selected"; mNew = []; mLoad();
+  };
+  $("m-dismiss").onclick = async () => { const ids = mPicked(); if (ids.length) { await api("/api/mine/dismiss", { ids }); mNew = []; mLoad(); } };
+  window.addEventListener("hashchange", () => { if (location.hash === "#import") mLoad(); });
+  if (location.hash === "#import") mLoad();
+
   // first run: empty memory → invite to scan; opening Import with an empty memory scans right away
   async function emptyCheck() {
     try {

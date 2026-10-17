@@ -124,6 +124,13 @@
       <div id="d-list"></div></div>
     <div class="hidden" id="d-done"></div>
   </section>
+  <section class="card" id="m-card" style="margin:0 36px 14px"><div class="card-h"><h2>Full history</h2><span class="muted small" id="m-sum"></span></div>
+    <p class="small muted">Reads <b>every</b> chat of the selected sources in the background (the scan above only reads the newest ones). You can keep using Mnemos, quit and come back: it continues where it stopped, and next time it only reads what is new. Nothing is saved until you approve it here.</p>
+    <div class="me-actions"><button class="mbtn primary" id="m-go">Read my full history (selected sources)</button><button class="mbtn hidden" id="m-pause">Pause</button><button class="mbtn hidden" id="m-resume">Resume</button><span class="muted small" id="m-msg"></span></div>
+    <div class="hidden" id="m-progress"><progress id="m-bar" max="1" value="0" style="width:100%"></progress><p class="small muted" id="m-phase"></p></div>
+    <div class="hidden" id="m-review"><div class="me-actions"><button class="mbtn primary" id="m-save">Save selected</button><button class="mbtn" id="m-dismiss">Dismiss selected</button><button class="mbtn" id="m-none">Select none</button></div>
+      <div id="m-list"></div></div>
+  </section>
   <section class="card" style="margin:0 36px 14px"><div class="card-h"><h2>Memories that live in the cloud</h2></div>
     <p class="small muted">Claude.ai and ChatGPT keep their memory online. One click copies a ready question and opens the site: paste it in a new chat, copy the answer, paste it below.</p>
     <div class="me-actions"><button class="mbtn" data-cloud="https://claude.ai/new">Ask Claude</button><button class="mbtn" data-cloud="https://chatgpt.com/">Ask ChatGPT</button><span class="muted small" id="c-msg"></span></div>

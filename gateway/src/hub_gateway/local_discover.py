@@ -335,12 +335,17 @@ async def llm_facts(llm: Any, msgs: list[str], calls: int = 6, size: int = 5000)
         batches.append(cur)
     out: list[str] = []
     for b in batches[-calls:]:  # newest messages last
-        try:
-            facts = (await llm.json(PROMPT + b)).get("facts") or []
-        except Exception:  # noqa: BLE001 — one bad call does not stop the import
-            continue
-        out += [f.strip() for f in facts if isinstance(f, str) and 10 <= len(f.strip()) <= 300]
+        out += await batch_facts(llm, b)
     return list(dict.fromkeys(out))
+
+
+async def batch_facts(llm: Any, batch: str) -> list[str]:
+    """Facts from one batch of messages ("...\n---\n" separated); [] when the call fails."""
+    try:
+        facts = (await llm.json(PROMPT + batch)).get("facts") or []
+    except Exception:  # noqa: BLE001 — one bad call does not stop the import
+        return []
+    return [f.strip() for f in facts if isinstance(f, str) and 10 <= len(f.strip()) <= 300]
 
 
 
