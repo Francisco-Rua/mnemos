@@ -28,9 +28,9 @@ echo "== Fin cognify $(date +%Y%m%d-%H%M%S) rc=$rc"
 # MNEMOS_HYGIENE / MNEMOS_HYGIENE_MODEL: from the environment or, if unset, from .env (the LaunchAgent/systemd unit
 # does not pass them).
 envval() { grep -E "^$1=" .env 2>/dev/null | tail -1 | cut -d= -f2- | sed -E 's/[[:space:]]+#.*$//'; }
-MNEMOS_HYGIENE="${MNEMOS_HYGIENE:-${AIHUB_HYGIENE:-$(envval '(MNEMOS|AIHUB)_HYGIENE')}}"
-MNEMOS_HYGIENE_MODEL="${MNEMOS_HYGIENE_MODEL:-${AIHUB_HYGIENE_MODEL:-$(envval '(MNEMOS|AIHUB)_HYGIENE_MODEL')}}"
-case "${MNEMOS_HYGIENE:-report}" in
+[[ -n "${MNEMOS_HYGIENE:-}${AIHUB_HYGIENE:-}" ]] || MNEMOS_HYGIENE="$(envval '(MNEMOS|AIHUB)_HYGIENE')"
+[[ -n "${MNEMOS_HYGIENE_MODEL:-}${AIHUB_HYGIENE_MODEL:-}" ]] || MNEMOS_HYGIENE_MODEL="$(envval '(MNEMOS|AIHUB)_HYGIENE_MODEL')"
+case "${MNEMOS_HYGIENE:-${AIHUB_HYGIENE:-report}}" in
   off) ;;
   report) "$PY" -u scripts/memory_hygiene.py || echo "higiene: falló (no afecta al cognify)";;
   llm) "$PY" -u scripts/memory_hygiene.py --llm "${MNEMOS_HYGIENE_MODEL:-${AIHUB_HYGIENE_MODEL:-llama3.1:8b}}" || echo "higiene: falló";;
