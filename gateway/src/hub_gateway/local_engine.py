@@ -511,8 +511,8 @@ class Engine:
         self.keys = KeyStore(self.home)
         self._llm: BuiltinLLM | None = None
         self._emb: BuiltinEmbedder | None = None
-        self._ollama: tuple[float, tuple[str, str] | None] = (0.0, None)
-        self._apple: tuple[float, tuple[bool, str]] = (0.0, (False, ""))
+        self._ollama: tuple[float, tuple[str, str] | None] = (-1e9, None)
+        self._apple: tuple[float, tuple[bool, str]] = (-1e9, (False, ""))  # monotonic can be < 600 on a fresh boot
         self._apple_llm: AppleLLM | None = None
         self.dl.on_ready = self._upgraded
 
