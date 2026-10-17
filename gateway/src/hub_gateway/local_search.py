@@ -188,7 +188,8 @@ class LocalIndex:
         if not self.embedder or not datasets:
             return []
         try:
-            qv = _unpack(_pack((await self.embedder.embed([query]))[0]))
+            f = getattr(self.embedder, "embed_query", None)  # EmbeddingGemma query prompt (doc vectors unchanged)
+            qv = _unpack(_pack((await (f([query]) if f else self.embedder.embed([query])))[0]))
         except Exception as exc:  # noqa: BLE001 — includes unusable vectors
             log.warning("embeddings unavailable: %s", type(exc).__name__)
             return []

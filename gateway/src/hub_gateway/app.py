@@ -404,12 +404,26 @@ def build_server(
         except Exception:  # noqa: BLE001 — the check is advisory
             return []
         tn, out = _tokens(text), []
-        for h in hits:
+        sims: list[float] = []
+        emb = getattr(index, "embedder", None)
+        if hits and emb and hasattr(emb, "embed_sim"):  # same fact in other words / another language
+            try:
+                vs = await emb.embed_sim([text] + [h["text"] for h in hits])
+                n0 = sum(x * x for x in vs[0]) ** 0.5 or 1.0
+                sims = [sum(a * b for a, b in zip(vs[0], v)) / (n0 * (sum(x * x for x in v) ** 0.5 or 1.0))
+                        for v in vs[1:]]
+            except Exception:  # noqa: BLE001 — words only
+                sims = []
+        from .local_engine import SEM_DUP
+        for i, h in enumerate(hits):
             th = _tokens(h["text"])
             j = len(tn & th) / len(tn | th) if tn and th else float(norm(text) == norm(h["text"]))
+            sem = sims[i] if i < len(sims) else 0.0
             clash = lexical_conflict(text, h["text"])  # "2 dogs" vs "3 dogs": same words, not a duplicate
-            kind = ("duplicate" if j >= 0.8 and not clash else "related"
-                    if (j >= 0.3 or "semantic" in h.get("match", "")) else None)
+            # by meaning only with some shared words: a save is refused on "duplicate", so a false alarm costs a note
+            kind = ("duplicate" if (j >= 0.8 or (sem >= SEM_DUP and j >= 0.25)) and not clash else "related"
+                    if (j >= 0.3 or sem >= SEM_DUP or "semantic" in h.get("match", "")) else None)
+            j = max(j, round(sem, 2)) if kind == "duplicate" else j
             if kind:
                 out.append({"id": h["id"], "kind": kind, "similarity": round(j, 2), "text": h["text"][:300]})
         return sorted(out, key=lambda n: -n["similarity"])[:3]

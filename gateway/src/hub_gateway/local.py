@@ -181,6 +181,8 @@ def http_app(home: Path, port: int):
             for s in subs.values():
                 await stack.enter_async_context(s.router.lifespan_context(s))
             task = None
+            from . import local_engine as _le
+            _le.get(home).autostart()  # 0.4 → 0.5 model upgrade / resume an interrupted download, in the background
             if os.environ.get("MNEMOS_HYGIENE", "1") != "0":
                 from .local_hygiene import nightly
                 task = asyncio.create_task(nightly(home, list(subs), ui.call))

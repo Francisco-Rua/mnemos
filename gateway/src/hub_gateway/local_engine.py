@@ -7,7 +7,7 @@ Features and the engines that can run them, in order of preference:
 An API key never sees search: only import and hygiene, each behind its own toggle, and the UI warns that the text
 leaves the Mac.
 
-Built-in = two small GGUF models run in-process by llama.cpp (llama-cpp-python, bundled in the Desktop app's
+Built-in = two GGUF models (Qwen3 4B, or 1.7B on 8 GB Macs, + EmbeddingGemma) run in-process by llama.cpp (llama-cpp-python, bundled in the Desktop app's
 Python; Metal on Apple Silicon). Downloaded once, on first run or with "Improve my memory": resumable (HTTP Range
 on <file>.part), sha256-checked, stored in <MNEMOS_HOME>/models. Declining or a failed download keeps Rules.
 
@@ -36,18 +36,47 @@ import httpx
 
 log = logging.getLogger("hub.engine")
 
-MODELS: list[dict[str, Any]] = [
+HF = "https://huggingface.co/"
+LLMS: dict[str, dict[str, Any]] = {  # extract mode: the model writes facts (classify mode was dropped in 0.5)
+    "4b": {"role": "llm", "name": "Qwen3 4B Instruct 2507 (Q4_K_M)", "license": "Apache-2.0",
+           "file": "Qwen3-4B-Instruct-2507-Q4_K_M.gguf", "size": 2497281120,
+           "sha256": "3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597",
+           "url": HF + "unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/a06e946bb6b655725eafa393f4a9745d460374c9/"
+                       "Qwen3-4B-Instruct-2507-Q4_K_M.gguf"},
+    "1.7b": {"role": "llm", "name": "Qwen3 1.7B (Q4_K_M)", "license": "Apache-2.0",
+             "file": "Qwen3-1.7B-Q4_K_M.gguf", "size": 1107409472, "suffix": " /no_think",
+             "sha256": "b139949c5bd74937ad8ed8c8cf3d9ffb1e99c866c823204dc42c0d91fa181897",
+             "url": HF + "unsloth/Qwen3-1.7B-GGUF/resolve/d7f544eead698dbd1f15126ef60b45a1e1933222/Qwen3-1.7B-Q4_K_M.gguf"},
+}
+EMBED: dict[str, Any] = {
+    "role": "embed", "name": "EmbeddingGemma 300M (Q8_0)", "license": "Gemma Terms of Use",
+    "file": "embeddinggemma-300M-Q8_0.gguf", "size": 333590944,
+    "sha256": "b5ce9d77a3fc4b3b39ccb5643c36777911cc4eb46a66962eadfa3f5f60490d63",
+    "url": HF + "ggml-org/embeddinggemma-300M-GGUF/resolve/0f741b5a6585bd53aeb15cd1372c56f2a0f65e12/"
+                "embeddinggemma-300M-Q8_0.gguf"}
+# 0.4 shipped this one: still used (extract mode) until the new model is downloaded, then deleted.
+LEGACY: list[dict[str, Any]] = [
     {"role": "llm", "name": "Qwen2.5 1.5B Instruct (Q4_K_M)", "license": "Apache-2.0",
-     "file": "qwen2.5-1.5b-instruct-q4_k_m.gguf", "size": 1117320736,
-     "sha256": "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
-     "url": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/91cad51170dc346986eccefdc2dd33a9da36ead9/"
-            "qwen2.5-1.5b-instruct-q4_k_m.gguf"},
-    {"role": "embed", "name": "EmbeddingGemma 300M (Q8_0)", "license": "Gemma Terms of Use",
-     "file": "embeddinggemma-300M-Q8_0.gguf", "size": 333590944,
-     "sha256": "b5ce9d77a3fc4b3b39ccb5643c36777911cc4eb46a66962eadfa3f5f60490d63",
-     "url": "https://huggingface.co/ggml-org/embeddinggemma-300M-GGUF/resolve/0f741b5a6585bd53aeb15cd1372c56f2a0f65e12/"
-            "embeddinggemma-300M-Q8_0.gguf"},
-]
+     "file": "qwen2.5-1.5b-instruct-q4_k_m.gguf", "size": 1117320736}]
+SMALL_RAM = 8 * 1024 ** 3  # 8 GB Macs get the 1.7B model (the 4B needs ~3.5 GB while it runs)
+
+
+def ram_bytes() -> int:
+    try:
+        return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
+    except (ValueError, OSError, AttributeError):
+        return 16 * 1024 ** 3
+
+
+def llm_size() -> str:
+    """"4b" or "1.7b": MNEMOS_LLM_SIZE wins, else by RAM (<= 8 GB → 1.7b)."""
+    want = os.environ.get("MNEMOS_LLM_SIZE", "").lower()
+    if want in LLMS:
+        return want
+    return "1.7b" if ram_bytes() <= SMALL_RAM else "4b"
+
+
+MODELS: list[dict[str, Any]] = [LLMS["4b"], EMBED]  # default manifest on a 16 GB+ Mac (docs, tests)
 API_MODELS = {"openai": "gpt-4.1-mini", "anthropic": "claude-haiku-4-5"}
 KEYCHAIN_SERVICE = "io.mnemos.desktop.apikey"
 FEATURES = ("import", "hygiene")
@@ -55,7 +84,7 @@ FEATURES = ("import", "hygiene")
 
 def manifest() -> list[dict[str, Any]]:
     p = os.environ.get("MNEMOS_MODELS_MANIFEST")
-    return json.loads(Path(p).read_text()) if p else MODELS
+    return json.loads(Path(p).read_text()) if p else [LLMS[llm_size()], EMBED]
 
 
 def runtime_ok() -> bool:
@@ -73,6 +102,7 @@ class Downloader:
         self.state: dict[str, Any] = {"state": "idle"}
         self.task: asyncio.Task | None = None
         self.transport = transport
+        self.on_ready: Any = None  # called after every file is in place (Engine: drop the 0.4 model)
 
     def path(self, m: dict) -> Path:
         return self.dir / m["file"]
@@ -102,6 +132,8 @@ class Downloader:
                 base += m["size"]
                 self.state.update(done=base)
             self.state = {"state": "ready", "done": total, "total": total}
+            if self.on_ready:
+                self.on_ready()
         except Exception as e:  # noqa: BLE001 — keep Rules; the .part stays for a resume
             log.warning("model download failed: %s", e)
             self.state = {**self.state, "state": "error", "error": str(e)[:300]}
@@ -224,37 +256,46 @@ class _Llama:
 
 class BuiltinLLM:
     kind = "builtin"
-    mode = "classify"  # import: judge rule-proposed sentences instead of writing facts (better for a 1.5B model)
+    mode = "extract"  # writes facts from batches of messages (0.5 benchmark: ~10x more useful than classify)
 
     def __init__(self, m: dict, path: Path) -> None:
         self.name, self.model = f"Built-in · {m['name']}", m["file"]
-        self._l = _Llama(path, n_ctx=4096)
+        self.suffix = m.get("suffix", "")  # Qwen3 1.7B is a thinking model: " /no_think"
+        self._l = _Llama(path, n_ctx=int(m.get("ctx", 4096)))
 
     def _run(self, prompt: str) -> str:
         with self._l._lock:
             out = self._l.get().create_chat_completion(
-                messages=[{"role": "user", "content": prompt}], temperature=0, max_tokens=1024,
+                messages=[{"role": "user", "content": prompt + self.suffix}], temperature=0, max_tokens=1024,
                 response_format={"type": "json_object"})
-        return out["choices"][0]["message"]["content"]
+        text = out["choices"][0]["message"]["content"] or ""
+        return text.split("</think>")[-1]
 
     async def json(self, prompt: str) -> dict:
         return _json(await asyncio.to_thread(self._run, prompt))
 
 
+# EmbeddingGemma prompts: stored note vectors use DOC (unchanged since 0.4, so old vectors stay valid); search
+# queries use QUERY; duplicate checks embed both sides with SIM (0.5 benchmark: perfect same/other split at ~0.80).
+PROMPTS = {"doc": "title: none | text: ", "query": "task: search result | query: ",
+           "sim": "task: sentence similarity | query: "}
+SEM_DUP = 0.80  # cosine on "sim" vectors (built-in) or on plain vectors (Ollama paraphrase models): same fact
+
+
 class BuiltinEmbedder:
-    """Same interface as local_search.OllamaEmbedder (async embed(texts), .model)."""
+    """Same interface as local_search.OllamaEmbedder (async embed(texts), .model), plus embed_query/embed_sim."""
     kind = "builtin"
 
     def __init__(self, m: dict, path: Path) -> None:
         self.name, self.model = f"Built-in · {m['name']}", "builtin:" + m["file"]
         self._l = _Llama(path, embedding=True, n_ctx=2048, n_batch=2048, n_ubatch=2048)
 
-    def _run(self, texts: list[str]) -> list[list[float]]:
+    def _run(self, texts: list[str], task: str = "doc") -> list[list[float]]:
         with self._l._lock:
             m = self._l.get()
             out = []
             for t in texts:
-                e = m.embed("title: none | text: " + t[:1500])  # EmbeddingGemma document format
+                e = m.embed(PROMPTS[task] + t[:1500])
                 if e and isinstance(e[0], list):  # a model without pooling gives one vector per token: mean-pool
                     e = [sum(col) / len(e) for col in zip(*e)]
                 out.append([float(x) for x in e])
@@ -262,6 +303,18 @@ class BuiltinEmbedder:
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         return await asyncio.to_thread(self._run, texts)
+
+    async def embed_query(self, texts: list[str]) -> list[list[float]]:
+        return await asyncio.to_thread(self._run, texts, "query")
+
+    async def embed_sim(self, texts: list[str]) -> list[list[float]]:
+        return await asyncio.to_thread(self._run, texts, "sim")
+
+
+async def embed_as(emb: Any, texts: list[str], task: str) -> list[list[float]]:
+    """task "query"/"sim" when the embedder has task prompts (built-in), else plain embed (Ollama)."""
+    f = getattr(emb, "embed_" + task, None) if task != "doc" else None
+    return await (f(texts) if f else emb.embed(texts))
 
 
 class EmbedProxy:
@@ -283,10 +336,19 @@ class EmbedProxy:
         return cur.model if cur else "none"
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
+        return await embed_as(self._need(), texts, "doc")
+
+    async def embed_query(self, texts: list[str]) -> list[list[float]]:
+        return await embed_as(self._need(), texts, "query")
+
+    async def embed_sim(self, texts: list[str]) -> list[list[float]]:
+        return await embed_as(self._need(), texts, "sim")
+
+    def _need(self) -> Any:
         cur = self._cur()
         if cur is None:
             raise LookupError("no embedding engine")
-        return await cur.embed(texts)
+        return cur
 
 
 # ------------------------------------------------------------------ API keys
@@ -371,6 +433,7 @@ class Engine:
         self._llm: BuiltinLLM | None = None
         self._emb: BuiltinEmbedder | None = None
         self._ollama: tuple[float, tuple[str, str] | None] = (0.0, None)
+        self.dl.on_ready = self._upgraded
 
     # settings
     def cfg(self) -> dict:
@@ -393,10 +456,42 @@ class Engine:
         return v
 
     def builtin_ready(self) -> bool:
-        return os.environ.get("MNEMOS_BUILTIN") != "0" and self.dl.ready() and runtime_ok()
+        return (os.environ.get("MNEMOS_BUILTIN") != "0" and runtime_ok() and self._embed_file() is not None
+                and self._llm_file() is not None)
 
     def _model(self, role: str) -> dict | None:
         return next((m for m in manifest() if m["role"] == role), None)
+
+    def _embed_file(self) -> tuple[dict, Path] | None:
+        m = self._model("embed")
+        return (m, self.dl.path(m)) if m and self.dl.present(m) else None
+
+    def _llm_file(self) -> tuple[dict, Path] | None:
+        """The current model, else the 0.4 one while the upgrade downloads (graceful migration)."""
+        m = self._model("llm")
+        if m and self.dl.present(m):
+            return m, self.dl.path(m)
+        old = self.legacy()
+        return (old, self.dl.path(old)) if old else None
+
+    def legacy(self) -> dict | None:
+        if os.environ.get("MNEMOS_MODELS_MANIFEST"):
+            return None
+        return next((m for m in LEGACY if self.dl.present(m)), None)
+
+    def _upgraded(self) -> None:
+        """New model verified: forget the old one (memory and disk). Any other model size stays (user choice)."""
+        self._llm = None
+        for m in LEGACY:
+            for p in (self.dl.path(m), self.dl.path(m).with_suffix(".part")):
+                p.unlink(missing_ok=True)
+
+    def autostart(self) -> None:
+        """At startup: a user who said yes to the built-in model gets missing files (0.4 → 0.5 upgrade, or an
+        interrupted download) fetched in the background; the old model keeps working meanwhile."""
+        if (self.cfg()["builtin"] == "on" and runtime_ok() and os.environ.get("MNEMOS_BUILTIN") != "0"
+                and not self.dl.ready()):
+            self.dl.start()
 
     # engines
     def llm(self, feature: str) -> Any:
@@ -411,10 +506,10 @@ class Engine:
         o = self.ollama()
         if o:
             return OllamaLLM(*o)
-        m = self._model("llm")
-        if m and self.builtin_ready():
-            if self._llm is None:
-                self._llm = BuiltinLLM(m, self.dl.path(m))
+        if self.builtin_ready():
+            m, path = self._llm_file()  # type: ignore[misc]
+            if self._llm is None or self._llm.model != m["file"]:
+                self._llm = BuiltinLLM(m, path)
             return self._llm
         return None
 
@@ -424,10 +519,10 @@ class Engine:
         if o:
             o.name, o.kind = f"Ollama · {o.model}", "ollama"
             return o
-        m = self._model("embed")
-        if m and self.builtin_ready():
+        e = self._embed_file()
+        if e and os.environ.get("MNEMOS_BUILTIN") != "0" and runtime_ok():
             if self._emb is None:
-                self._emb = BuiltinEmbedder(m, self.dl.path(m))
+                self._emb = BuiltinEmbedder(*e)
             return self._emb
         return None
 
@@ -440,6 +535,8 @@ class Engine:
         return {"active": {"import": show(self.llm("import")), "hygiene": show(self.llm("hygiene")),
                            "search": show(self.embedder()) if self.embedder() else {"kind": "rules", "name": "Keywords"}},
                 "builtin": {"choice": c["builtin"], "ready": self.dl.ready(), "runtime": runtime_ok(),
+                            "upgrade": bool(self.legacy()) and not self.dl.ready(), "size_choice": llm_size(),
+                            "ram_gb": round(ram_bytes() / 1024 ** 3),
                             "download": self.dl.state, "size": sum(m["size"] for m in ms),
                             "models": [{"role": m["role"], "name": m["name"], "size": m["size"], "license": m.get("license"),
                                         "present": self.dl.present(m)} for m in ms]},
@@ -469,7 +566,7 @@ class Engine:
         if self.dl.task and not self.dl.task.done():
             raise ValueError("a download is running")
         self._llm = self._emb = None
-        for m in manifest():
+        for m in [*manifest(), *LEGACY]:
             for p in (self.dl.path(m), self.dl.path(m).with_suffix(".part")):
                 p.unlink(missing_ok=True)
         c = self.cfg()

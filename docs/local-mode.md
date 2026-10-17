@@ -45,10 +45,15 @@ batch. Env: `MNEMOS_SCAN_HOME` (scan another home, used by tests), `MNEMOS_DISCO
 | Search / duplicate check (embeddings) | Ollama (`HUB_EMBED_URL`/`HUB_EMBED_MODEL`) → Built-in → keywords |
 
 Built-in models (downloaded into `<home>/models`, resumable with HTTP Range, sha256-checked, pinned revisions):
-Qwen2.5-1.5B-Instruct Q4_K_M (1.12 GB, Apache-2.0) and EmbeddingGemma-300M Q8_0 (334 MB, Gemma Terms of Use), run
+Qwen3-4B-Instruct-2507 Q4_K_M (2.5 GB, Apache-2.0) — or Qwen3-1.7B Q4_K_M (1.1 GB) on Macs with 8 GB RAM or
+less (`MNEMOS_LLM_SIZE=4b|1.7b` overrides) — and EmbeddingGemma-300M Q8_0 (334 MB, Gemma Terms of Use), run
 in-process by llama.cpp (`pip install "mnemos-hub[local-ai]"`; bundled in the Mac app, Metal on Apple Silicon).
-For import the 1.5B model judges the sentences the rules propose (one short call each) instead of writing facts:
-small models are reliable judges and unreliable writers. Ollama and API models write facts directly.
+The model writes facts from batches of messages (extract mode; see `docs/benchmarks/local-architecture.md`).
+Embeddings use EmbeddingGemma's task prompts (document / search query / sentence similarity); duplicates by
+meaning are cosine ≥ 0.80 on similarity vectors.
+
+Upgrading from 0.4: if you had said yes to the built-in model, the new one downloads in the background at start;
+the old Qwen2.5 1.5B keeps working until the new file is verified, then it is deleted.
 
 API keys: macOS Keychain via `/usr/bin/security` (key passed on stdin, service `io.mnemos.desktop.apikey`), or
 `<home>/apikeys.json` (0600) off macOS / with `MNEMOS_NO_KEYCHAIN=1`; never in `engine.json`. Secrets are

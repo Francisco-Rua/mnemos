@@ -343,39 +343,6 @@ async def llm_facts(llm: Any, msgs: list[str], calls: int = 6, size: int = 5000)
     return list(dict.fromkeys(out))
 
 
-CLASSIFY = ("Is this sentence, written by a person to an AI assistant, a DURABLE fact about the person's life worth "
-            "remembering for months (identity, family, friends, home, job, projects, tools they use, lasting tastes)? "
-            "Requests, tasks, bugs, code, today's plans and opinions about code are NOT.\n"
-            'Examples:\n"I live in Lyon." -> {"durable": true}\n"Fix the tests please" -> {"durable": false}\n'
-            '"I have an error in main.py" -> {"durable": false}\n"Mi esposa se llama Ana." -> {"durable": true}\n'
-            '"I want you to add logging" -> {"durable": false}\n"I use Neovim every day." -> {"durable": true}\n'
-            "Reply JSON only.\nSentence: ")
-MAX_CLASSIFY = 200  # per source; the rest falls back to the rules
-
-
-async def llm_filter(llm: Any, msgs: list[str], deadline: float) -> list[str]:
-    """Small models (built-in) are better judges than writers: the rules propose first-person sentences (loosely)
-    and the model keeps the durable ones. Past the cap or the deadline the strict rules decide."""
-    strict = set(facts_from_messages(msgs))
-    loose = facts_from_messages(msgs, strict=False)
-    loose = [t for t in loose if t in strict][::-1] + [t for t in loose if t not in strict][::-1]  # newest first
-    out: list[str] = []
-    for i, t in enumerate(loose):
-        if i >= MAX_CLASSIFY or time.monotonic() > deadline:
-            out += [x for x in loose[i:] if x in strict]
-            break
-        if has_secret(t):
-            continue
-        try:
-            d = (await llm.json(CLASSIFY + json.dumps(t, ensure_ascii=False))).get("durable")
-        except Exception:  # noqa: BLE001
-            d = t in strict
-        if d is True or str(d).lower() == "true":
-            out.append(t)
-    return out
-
-
-SEM_DUP = 0.92  # cosine, built-in/Ollama embeddings: same fact in other words
 
 
 async def semantic_dupes(items: list[dict], pool: dict[str, list[str]], embedder: Any) -> int:
@@ -388,7 +355,8 @@ async def semantic_dupes(items: list[dict], pool: dict[str, list[str]], embedder
         return 0
     ctxs = {i["context"] for i in items}
     olds = [(c, t) for c in ctxs for t in pool.get(c, [])][:2000]
-    vecs = await embedder.embed([t for _, t in olds] + texts)
+    from .local_engine import SEM_DUP, embed_as
+    vecs = await embed_as(embedder, [t for _, t in olds] + texts, "sim")
 
     def unit(v: list[float]) -> list[float]:
         n = math.sqrt(sum(x * x for x in v)) or 1.0
@@ -423,10 +391,7 @@ async def preview(sources: list[dict], existing: dict[str, list[str]], progress:
         facts = facts_from_messages(msgs)
         if llm and msgs and time.monotonic() < deadline:
             progress({"phase": f"Finding facts in {src['label']} ({llm.name})", "done": i, "total": len(sources)})
-            if getattr(llm, "mode", "extract") == "classify":
-                facts = await llm_filter(llm, msgs, deadline)
-            else:
-                facts = (await llm_facts(llm, msgs)) or facts
+            facts = (await llm_facts(llm, msgs)) or facts
         cands = notes + facts
         kept = [t for t in cands if not has_secret(t)]
         ctx = src.get("context") or ""
